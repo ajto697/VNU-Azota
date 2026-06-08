@@ -1,0 +1,6 @@
+{
+  "name": "Azota - Giao bài tập & Đề thi",
+  "description": "Nền tảng tự tạo bài thi và luyện tập trắc nghiệm thông minh. Học sinh chỉ cần gửi đề kèm đáp án là hệ thống tự sinh bài thi áp lực có đồng hồ đếm ngược và bài ôn tập tương tác, tích hợp Pomodoro và theo dõi chuỗi ngày Streak.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

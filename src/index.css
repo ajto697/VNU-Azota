@@ -1,0 +1,128 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;850&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* SCOPED DARK MODE OVERRIDES FOR PORTAL */
+.vnu-dark-theme {
+  background-color: #070a13 !important;
+  color: #e2e8f0 !important;
+}
+
+.vnu-dark-theme .bg-white {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  border-color: #1e293b !important;
+}
+
+.vnu-dark-theme .bg-slate-50,
+.vnu-dark-theme .bg-slate-50\/50,
+.vnu-dark-theme .bg-slate-100 {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+/* Text selections & contrast values */
+.vnu-dark-theme .text-slate-900,
+.vnu-dark-theme .text-slate-800,
+.vnu-dark-theme .text-slate-700 {
+  color: #f1f5f9 !important;
+}
+
+.vnu-dark-theme .text-slate-650,
+.vnu-dark-theme .text-slate-600,
+.vnu-dark-theme .text-slate-505,
+.vnu-dark-theme .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+.vnu-dark-theme .text-slate-450,
+.vnu-dark-theme .text-slate-400 {
+  color: #64748b !important;
+}
+
+/* Borders */
+.vnu-dark-theme .border-slate-100,
+.vnu-dark-theme .border-slate-105,
+.vnu-dark-theme .border-slate-150,
+.vnu-dark-theme .border-slate-200,
+.vnu-dark-theme .border-slate-205,
+.vnu-dark-theme .border-slate-250 {
+  border-color: #1e293b !important;
+}
+
+/* Hover selections on option cards & list buttons */
+.vnu-dark-theme .bg-white.hover\:border-indigo-400:hover,
+.vnu-dark-theme .active\:bg-slate-100:active,
+.vnu-dark-theme .hover\:bg-slate-50:hover,
+.vnu-dark-theme .hover\:bg-slate-100:hover {
+  background-color: #1e293b !important;
+  border-color: #4f46e5 !important;
+}
+
+.vnu-dark-theme .bg-white.hover\:border-blue-400:hover {
+  background-color: #1e293b !important;
+  border-color: #2563eb !important;
+}
+
+/* Badges background replacements for high visibility in dark environment */
+.vnu-dark-theme .bg-indigo-50 {
+  background-color: rgba(99, 102, 241, 0.15) !important;
+  color: #e0e7ff !important;
+  border-color: rgba(99, 102, 241, 0.3) !important;
+}
+
+.vnu-dark-theme .bg-blue-50 {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+  color: #dbeafe !important;
+  border-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+.vnu-dark-theme .bg-emerald-50,
+.vnu-dark-theme .bg-emerald-100 {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+  color: #d1fae5 !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+.vnu-dark-theme .bg-orange-50 {
+  background-color: rgba(249, 115, 22, 0.15) !important;
+  color: #ffedd5 !important;
+  border-color: rgba(249, 115, 22, 0.3) !important;
+}
+
+.vnu-dark-theme .bg-red-50,
+.vnu-dark-theme .bg-red-100 {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+  color: #fee2e2 !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+.vnu-dark-theme .bg-amber-50 {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  color: #fef3c7 !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+}
+
+/* Code & inputs controls inside the sidebar */
+.vnu-dark-theme select,
+.vnu-dark-theme input {
+  background-color: #0f172a !important;
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+}
+
+/* Sidebar individual question indicators */
+.vnu-dark-theme .bg-slate-100.text-slate-400 {
+  background-color: #1e293b !important;
+  color: #64748b !important;
+}
+
+/* Fix text in Recharts legendary widgets */
+.vnu-dark-theme .recharts-default-legendText {
+  color: #cbd5e1 !important;
+}
+
