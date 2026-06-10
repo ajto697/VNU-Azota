@@ -11,7 +11,8 @@ import {
   CheckCircle2, Flame, Sparkles, BookMarked, Timer, LogOut, 
   AlertCircle, ShieldAlert, Award as MedalIcon,
   Coffee, Pause, RotateCcw, Volume2,
-  Sun, Moon, Trash2, Plus, Download, Upload
+  Sun, Moon, Trash2, Plus, Download, Upload, Shuffle,
+  Trophy, Users, Target
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -27,7 +28,146 @@ import {
 } from 'recharts';
 import { getFullVNU1001Database as getFullVNU1001Database_IMPORT, VNU_TOPICS as VNU_TOPICS_IMPORT, VNUQuestion } from '../vnu1001_questions';
 import { getFullPLDCDatabase, PLDC_TOPICS } from '../pldc_questions';
+import { getFullMLDGDatabase, MLDG_TOPICS } from '../mldg_questions';
+import { getFullTLHGDDatabase, TLHGD_TOPICS } from '../tlhgd_questions';
 import DetailedExplanationBox from './DetailedExplanationBox';
+import { PLDC_EXAMS_PART1, PLDCOfficialExam } from '../pldc_exams_part1';
+import { PLDC_EXAMS_PART2 } from '../pldc_exams_part2';
+import { PLDC_EXAMS_PART3 } from '../pldc_exams_part3';
+
+const ALL_PLDC_EXAMS: PLDCOfficialExam[] = [
+  ...PLDC_EXAMS_PART1,
+  ...PLDC_EXAMS_PART2,
+  ...PLDC_EXAMS_PART3
+];
+
+function synchronizeDatabase(savedList: VNUQuestion[], masterList: VNUQuestion[]): VNUQuestion[] {
+  const masterMap = new Map<string, VNUQuestion>(masterList.map(q => [q.id, q]));
+  const seenMasterIds = new Set<string>();
+  const result: VNUQuestion[] = [];
+
+  for (const q of savedList) {
+    if (masterMap.has(q.id)) {
+      result.push(masterMap.get(q.id)!);
+      seenMasterIds.add(q.id);
+    } else {
+      result.push(q);
+    }
+  }
+
+  for (const q of masterList) {
+    if (!seenMasterIds.has(q.id)) {
+      result.push(q);
+    }
+  }
+
+  return result;
+}
+
+function getShuffledOptions(q: VNUQuestion, enabled: boolean): { options: string[], correctOptionIndex: number, originalToShuffled: number[], shuffledToOriginal: number[] } {
+  if (!q || !Array.isArray(q.options) || q.options.length !== 4) {
+    return {
+      options: q ? q.options || [] : [],
+      correctOptionIndex: q ? q.correctOption : 0,
+      originalToShuffled: [0, 1, 2, 3],
+      shuffledToOriginal: [0, 1, 2, 3]
+    };
+  }
+
+  if (!enabled) {
+    return {
+      options: q.options,
+      correctOptionIndex: q.correctOption,
+      originalToShuffled: [0, 1, 2, 3],
+      shuffledToOriginal: [0, 1, 2, 3]
+    };
+  }
+
+  // Deterministic shuffle using a hash of the question's ID.
+  let hash = 0;
+  const str = q.id || "";
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  const pseudoRandom = () => {
+    const x = Math.sin(hash++) * 10000;
+    return x - Math.floor(x);
+  };
+
+  const pairs = q.options.map((opt, idx) => ({ opt, originalIndex: idx }));
+  
+  for (let i = pairs.length - 1; i > 0; i--) {
+     const j = Math.floor(pseudoRandom() * (i + 1));
+     const temp = pairs[i];
+     pairs[i] = pairs[j];
+     pairs[j] = temp;
+  }
+
+  const shuffledOptions = pairs.map(p => p.opt);
+  const shuffledToOriginal = pairs.map(p => p.originalIndex);
+  const originalToShuffled = new Array(4);
+  shuffledToOriginal.forEach((origIdx, shufIdx) => {
+    originalToShuffled[origIdx] = shufIdx;
+  });
+
+  const correctOptionIndex = originalToShuffled[q.correctOption] ?? q.correctOption;
+
+  return {
+    options: shuffledOptions,
+    correctOptionIndex,
+    originalToShuffled,
+    shuffledToOriginal
+  };
+}
+
+// Generate realistic competitor entries for the mock exam leaderboard
+const generateMockCompetitors = (totalQuestions: number, userScore: number, userTimeSpentSec: number) => {
+  const baseCompetitors = [
+    { name: "Phạm Hoàng Sơn", className: "K68-CNTT VNU", accRate: 0.975 },
+    { name: "Lê Nhật Linh", className: "K69-Địa lý học", accRate: 0.95 },
+    { name: "Trần Thế Phong", className: "K68-Khoa học Máy tính", accRate: 0.925 },
+    { name: "Nguyễn Vũ Minh Anh", className: "K68-Tài chính Doanh nghiệp", accRate: 0.90 },
+    { name: "Bùi Thị Phương Thảo", className: "K69-Ngôn ngữ Anh", accRate: 0.875 },
+    { name: "Đặng Gia Huy", className: "K67-Xã hội học VNU", accRate: 0.85 },
+    { name: "Vũ Quốc Khánh", className: "K68-Luật dân sự", accRate: 0.80 },
+    { name: "Phạm Thúy Diễm", className: "K69-Quản trị Khách sạn", accRate: 0.775 },
+    { name: "Đỗ Anh Tài", className: "K68-Cơ kỹ thuật", accRate: 0.725 },
+    { name: "Nguyễn Ngọc Huy", className: "K69-Kế toán", accRate: 0.675 },
+    { name: "Hoàng Minh Trí", className: "K68-Sinh học VNU", accRate: 0.60 },
+    { name: "Phùng Mỹ Linh", className: "K67-Sư phạm Hóa", accRate: 0.525 },
+    { name: "Đinh Văn Khoa", className: "K69-Vật lý kĩ thuật", accRate: 0.45 },
+  ];
+
+  return baseCompetitors.map((bc, idx) => {
+    const correctCount = Math.round(totalQuestions * bc.accRate);
+    const score = (correctCount / totalQuestions) * 10;
+    // Fast or medium completion times, staggered
+    const timeSpentSec = Math.round(800 - (bc.accRate * 250) + (idx * 45) + Math.random() * 30);
+    const mins = Math.floor(timeSpentSec / 60);
+    const secs = timeSpentSec % 60;
+    const timeSpentStr = `${mins} phút ${secs} giây`;
+
+    const colors = [
+      "bg-emerald-500 text-white", "bg-purple-500 text-white", "bg-amber-500 text-white", 
+      "bg-pink-500 text-white", "bg-sky-500 text-white", "bg-orange-500 text-white", 
+      "bg-teal-500 text-white", "bg-violet-500 text-white", "bg-rose-500 text-white"
+    ];
+    const avatarBg = colors[idx % colors.length];
+
+    return {
+      name: bc.name,
+      className: bc.className,
+      correctCount,
+      totalCount: totalQuestions,
+      score,
+      timeSpentSec,
+      timeSpentStr,
+      avatarBg,
+      isVirtual: true,
+    };
+  });
+};
 
 interface Vnu1001PortalProps {
   onBackToLauncher: () => void;
@@ -45,11 +185,11 @@ const STORAGE_THEME_KEY = "vnu1001_theme_v1";
 
 export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) {
   // --- SUBJECT STATE ---
-  const [currentSubject, setCurrentSubject] = useState<'vnu1001' | 'pldc'>(() => {
+  const [currentSubject, setCurrentSubject] = useState<'vnu1001' | 'pldc' | 'mldg' | 'tlhgd'>(() => {
     try {
       const saved = localStorage.getItem("selected_subject_pldc_v1");
-      if (saved === 'pldc' || saved === 'vnu1001') {
-        return saved;
+      if (saved === 'pldc' || saved === 'vnu1001' || saved === 'mldg' || saved === 'tlhgd') {
+        return saved as 'vnu1001' | 'pldc' | 'mldg' | 'tlhgd';
       }
     } catch (e) {}
     return 'vnu1001';
@@ -57,27 +197,66 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
 
   // --- SMART SHADOWS FOR PERFECT COMPATIBILITY ---
   const getFullVNU1001Database = () => {
-    return currentSubject === 'vnu1001' ? getFullVNU1001Database_IMPORT() : getFullPLDCDatabase();
+    if (currentSubject === 'vnu1001') return getFullVNU1001Database_IMPORT();
+    if (currentSubject === 'pldc') return getFullPLDCDatabase();
+    if (currentSubject === 'mldg') return getFullMLDGDatabase();
+    return getFullTLHGDDatabase();
   };
 
-  const VNU_TOPICS = currentSubject === 'vnu1001' ? VNU_TOPICS_IMPORT : PLDC_TOPICS;
+  const VNU_TOPICS = currentSubject === 'vnu1001' 
+    ? VNU_TOPICS_IMPORT 
+    : currentSubject === 'pldc' 
+      ? PLDC_TOPICS 
+      : currentSubject === 'mldg'
+        ? MLDG_TOPICS
+        : TLHGD_TOPICS;
 
   // --- DYNAMIC DATABASE STATE ENGINE ---
   const [activeDatabase, setActiveDatabase] = useState<VNUQuestion[]>(() => {
     const savedSubject = (() => {
       try {
         const saved = localStorage.getItem("selected_subject_pldc_v1");
-        if (saved === 'pldc' || saved === 'vnu1001') return saved;
+        if (saved === 'pldc' || saved === 'vnu1001' || saved === 'mldg' || saved === 'tlhgd') return saved;
       } catch (e) {}
       return 'vnu1001';
     })();
 
+    const getMasterDbForSubject = (subj: 'vnu1001' | 'pldc' | 'mldg' | 'tlhgd'): VNUQuestion[] => {
+      if (subj === 'pldc') return getFullPLDCDatabase();
+      if (subj === 'mldg') return getFullMLDGDatabase();
+      if (subj === 'tlhgd') return getFullTLHGDDatabase();
+      return getFullVNU1001Database_IMPORT();
+    };
+
     try {
-      const key = savedSubject === 'pldc' ? "pldc_custom_database_v1" : "vnu1001_custom_database_v1";
+      const key = savedSubject === 'pldc' 
+        ? "pldc_custom_database_v1" 
+        : savedSubject === 'mldg'
+          ? "mldg_custom_database_v1"
+          : savedSubject === 'tlhgd'
+            ? "tlhgd_custom_database_v1"
+            : "vnu1001_custom_database_v1";
       const saved = localStorage.getItem(key);
+      const masterList = getMasterDbForSubject(savedSubject);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          const masterIds = new Set(masterList.map(q => q.id));
+          const savedIds = new Set(parsed.map(q => q.id));
+          let needSync = false;
+          for (const mId of masterIds) {
+            if (!savedIds.has(mId)) {
+              needSync = true;
+              break;
+            }
+          }
+          if (needSync) {
+            const synched = synchronizeDatabase(parsed, masterList);
+            try {
+              localStorage.setItem(key, JSON.stringify(synched));
+            } catch (err) {}
+            return synched;
+          }
           return parsed;
         }
       }
@@ -85,7 +264,10 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
       console.error("Lỗi tải đề thi tùy chỉnh:", e);
     }
     // Mặc định: Nạp sẵn đề thi tương ứng
-    return savedSubject === 'pldc' ? getFullPLDCDatabase() : getFullVNU1001Database_IMPORT();
+    if (savedSubject === 'pldc') return getFullPLDCDatabase();
+    if (savedSubject === 'mldg') return getFullMLDGDatabase();
+    if (savedSubject === 'tlhgd') return getFullTLHGDDatabase();
+    return getFullVNU1001Database_IMPORT();
   });
 
   const fullDatabase = activeDatabase;
@@ -102,6 +284,19 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
   const [completedDates, setCompletedDates] = useState<string[]>([]); // array of YYYY-MM-DD
   const [todayPracticedCount, setTodayPracticedCount] = useState<number>(0);
   const [todayMockSubmitted, setTodayMockSubmitted] = useState<boolean>(false);
+  const [reminderTime, setReminderTime] = useState<string>("20:00");
+  const [reminderActive, setReminderActive] = useState<boolean>(true);
+  const [streakToasts, setStreakToasts] = useState<{ id: string; message: string; type: 'success' | 'warning' | 'info' }[]>([]);
+
+  const addStreakToast = (message: string, type: 'success' | 'warning' | 'info' = 'success') => {
+    const id = "toast_" + Date.now() + "_" + Math.random();
+    setStreakToasts(prev => [...prev, { id, message, type }]);
+    
+    // Auto remove toast after 4.5 seconds
+    setTimeout(() => {
+      setStreakToasts(prev => prev.filter(t => t.id !== id));
+    }, 4500);
+  };
 
   // --- CUSTOM DIALOGS FOR SAFE RUNTIME IN IFRAMES ---
   const [modalConfig, setModalConfig] = useState<{
@@ -239,7 +434,13 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
 
       setActiveDatabase(updatedDb);
       try {
-        const key = currentSubject === 'pldc' ? "pldc_custom_database_v1" : "vnu1001_custom_database_v1";
+        const key = currentSubject === 'pldc' 
+          ? "pldc_custom_database_v1" 
+          : currentSubject === 'mldg'
+            ? "mldg_custom_database_v1"
+            : currentSubject === 'tlhgd'
+              ? "tlhgd_custom_database_v1"
+              : "vnu1001_custom_database_v1";
         localStorage.setItem(key, JSON.stringify(updatedDb));
       } catch (e) {
         console.error(e);
@@ -262,12 +463,30 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
   };
 
   const handleResetToDefault = () => {
-    const subjectPrefixName = currentSubject === 'vnu1001' ? "600 câu hỏi chuẩn VNU1001" : "câu hỏi Pháp Luật Đại Cương chuẩn";
-    const key = currentSubject === 'vnu1001' ? "vnu1001_custom_database_v1" : "pldc_custom_database_v1";
+    const subjectPrefixName = currentSubject === 'vnu1001' 
+      ? "600 câu hỏi chuẩn VNU1001" 
+      : currentSubject === 'pldc'
+        ? "câu hỏi Pháp Luật Đại Cương chuẩn"
+        : currentSubject === 'mldg'
+          ? "câu hỏi Nhập môn đo lường đánh giá chuẩn"
+          : "câu hỏi Tâm lý học học đường chuẩn";
+    const key = currentSubject === 'pldc' 
+      ? "pldc_custom_database_v1" 
+      : currentSubject === 'mldg'
+        ? "mldg_custom_database_v1"
+        : currentSubject === 'tlhgd'
+          ? "tlhgd_custom_database_v1"
+          : "vnu1001_custom_database_v1";
     customConfirm(
       `Bạn có chắc chắn muốn khôi phục lại ngân hàng ${subjectPrefixName}? Toàn bộ các câu hỏi tự tạo hoặc tải lên của bạn sẽ bị xóa khỏi bộ nhớ.`,
       () => {
-        const defaultDb = currentSubject === 'vnu1001' ? getFullVNU1001Database_IMPORT() : getFullPLDCDatabase();
+        const defaultDb = currentSubject === 'vnu1001' 
+          ? getFullVNU1001Database_IMPORT() 
+          : currentSubject === 'pldc'
+            ? getFullPLDCDatabase()
+            : currentSubject === 'mldg'
+              ? getFullMLDGDatabase()
+              : getFullTLHGDDatabase();
         setActiveDatabase(defaultDb);
         localStorage.removeItem(key);
         customAlert(`Đã khôi phục thành công ngân hàng ${subjectPrefixName}!`);
@@ -396,6 +615,14 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
   const [practiceStatusFilter, setPracticeStatusFilter] = useState<string>('all'); // 'all' | 'wrong' | 'unanswered' | 'correct'
   const [chosenOption, setChosenOption] = useState<number | null>(null);
   const [showExplanation, setShowExplanation] = useState<boolean>(false);
+  const [showPracticeResult, setShowPracticeResult] = useState<boolean>(false);
+  const [practiceExamMode, setPracticeExamMode] = useState<boolean>(false);
+  const [practiceTempAnswers, setPracticeTempAnswers] = useState<{ [qId: string]: number }>({});
+
+  const [shuffleOptions, setShuffleOptions] = useState<boolean>(() => {
+    const saved = localStorage.getItem("vnu1001_shuffle_options_v1");
+    return saved !== null ? saved === "true" : true;
+  });
 
   // Mock Exam state
   const [mockQuestions, setMockQuestions] = useState<VNUQuestion[]>([]);
@@ -413,10 +640,63 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
     timeSpent: string;
   } | null>(null);
   const [examReviewFilter, setExamReviewFilter] = useState<string>('all'); // 'all' | 'wrong'
+  const [currentOfficialExamId, setCurrentOfficialExamId] = useState<string | null>(null);
+  const [pldcSearchQuery, setPldcSearchQuery] = useState<string>('');
+  const [examLeaderboard, setExamLeaderboard] = useState<any[]>([]);
+  const [leaderboardSearchQuery, setLeaderboardSearchQuery] = useState<string>('');
 
+  // Practice competitor list - dynamically synced to user's correct rate in current topic
+  const practiceLeaderboard = useMemo(() => {
+    const topicQs = fullDatabase.filter(q => q.topicId === selectedTopic);
+    const totalCount = topicQs.length;
+    if (totalCount === 0) return [];
+
+    const userCorrectCount = topicQs.filter(q => answeredHistory[q.id]?.correct).length;
+
+    const baseCompetitors = [
+      { name: "Phạm Minh Đức", className: "K68-CNTT 2", accRate: 0.94 },
+      { name: "Trần Thị Mai Anh", className: "K69-Sư phạm Toán", accRate: 0.86 },
+      { name: "Lê Gia Bảo", className: "K68-Kinh tế Đối ngoại", accRate: 0.78 },
+      { name: "Nguyễn Thảo Vy", className: "K69-Khoa học Máy tính", accRate: 0.70 },
+      { name: "Đặng Hoàng Long", className: "K68-Y đa khoa", accRate: 0.62 },
+      { name: "Vũ Khánh Linh", className: "K69-Ngôn ngữ Trung", accRate: 0.50 },
+      { name: "Bùi Tiến Phát", className: "K67-Kỹ thuật Điện", accRate: 0.40 },
+    ];
+
+    const list = baseCompetitors.map((bc, idx) => {
+      const correctCount = Math.min(totalCount, Math.round(totalCount * bc.accRate));
+      const completionRate = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
+      const colors = [
+        "bg-teal-500 text-white", "bg-indigo-500 text-white", "bg-purple-500 text-white", "bg-pink-500 text-white", 
+        "bg-amber-500 text-white", "bg-rose-500 text-white", "bg-sky-500 text-white"
+      ];
+      return {
+        name: bc.name,
+        className: bc.className,
+        correctCount,
+        completionRate,
+        avatarBg: colors[idx % colors.length],
+        isVirtual: true
+      };
+    });
+
+    const userCompletionRate = totalCount > 0 ? Math.round((userCorrectCount / totalCount) * 100) : 0;
+    list.push({
+      name: "Bạn (Cá nhân)",
+      className: "Học viên tự luyện",
+      correctCount: userCorrectCount,
+      completionRate: userCompletionRate,
+      avatarBg: "bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1 font-bold",
+      isVirtual: false
+    });
+
+    list.sort((a, b) => b.correctCount - a.correctCount);
+
+    return list.map((item, idx) => ({ ...item, rank: idx + 1 }));
+  }, [selectedTopic, answeredHistory, fullDatabase]);
 
   // --- SWITCH SUBJECT UTILITY HANDLER ---
-  const handleSwitchSubject = (subject: 'vnu1001' | 'pldc') => {
+  const handleSwitchSubject = (subject: 'vnu1001' | 'pldc' | 'mldg' | 'tlhgd') => {
     try {
       localStorage.setItem("selected_subject_pldc_v1", subject);
     } catch (e) {}
@@ -438,18 +718,57 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
 
     // Retrieve respective custom database or fall back to default
     try {
-      const key = subject === 'pldc' ? "pldc_custom_database_v1" : "vnu1001_custom_database_v1";
+      const key = subject === 'pldc' 
+        ? "pldc_custom_database_v1" 
+        : subject === 'mldg'
+          ? "mldg_custom_database_v1"
+          : subject === 'tlhgd'
+            ? "tlhgd_custom_database_v1"
+            : "vnu1001_custom_database_v1";
       const saved = localStorage.getItem(key);
+      const masterList = subject === 'pldc'
+        ? getFullPLDCDatabase()
+        : subject === 'mldg'
+          ? getFullMLDGDatabase()
+          : subject === 'tlhgd'
+            ? getFullTLHGDDatabase()
+            : getFullVNU1001Database_IMPORT();
+
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setActiveDatabase(parsed);
+          const masterIds = new Set(masterList.map(q => q.id));
+          const savedIds = new Set(parsed.map(q => q.id));
+          let needSync = false;
+          for (const mId of masterIds) {
+            if (!savedIds.has(mId)) {
+              needSync = true;
+              break;
+            }
+          }
+          if (needSync) {
+            const synched = synchronizeDatabase(parsed, masterList);
+            try {
+              localStorage.setItem(key, JSON.stringify(synched));
+            } catch (err) {}
+            setActiveDatabase(synched);
+          } else {
+            setActiveDatabase(parsed);
+          }
           return;
         }
       }
     } catch (e) {}
 
-    setActiveDatabase(subject === 'pldc' ? getFullPLDCDatabase() : getFullVNU1001Database_IMPORT());
+    if (subject === 'pldc') {
+      setActiveDatabase(getFullPLDCDatabase());
+    } else if (subject === 'mldg') {
+      setActiveDatabase(getFullMLDGDatabase());
+    } else if (subject === 'tlhgd') {
+      setActiveDatabase(getFullTLHGDDatabase());
+    } else {
+      setActiveDatabase(getFullVNU1001Database_IMPORT());
+    }
   };
 
 
@@ -459,6 +778,26 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
   const [pomoIsActive, setPomoIsActive] = useState<boolean>(false);
   const [pomoMode, setPomoMode] = useState<'focus' | 'break'>('focus');
   const [pomoCompletedSessions, setPomoCompletedSessions] = useState<number>(0);
+
+  // Filter official PLDC exams based on search query
+  const filteredOfficialExams = useMemo(() => {
+    if (!pldcSearchQuery.trim()) return ALL_PLDC_EXAMS;
+    const q = pldcSearchQuery.toLowerCase();
+    return ALL_PLDC_EXAMS.filter(exam => 
+      exam.title.toLowerCase().includes(q) || 
+      exam.description.toLowerCase().includes(q)
+    );
+  }, [pldcSearchQuery]);
+
+  // Aggregate user attempts for official exams
+  const getExamStats = (examId: string) => {
+    const attempts = mockHistory.filter(h => h.examId === examId);
+    if (attempts.length === 0) return { attempts: 0, highScore: null, passed: false };
+    const scores = attempts.map(h => h.score);
+    const highScore = Math.max(...scores);
+    const passed = attempts.some(h => h.passed);
+    return { attempts: attempts.length, highScore, passed };
+  };
 
   // Filter practice questions based on topic, difficulty & status
   const filteredPracticeQuestions = useMemo(() => {
@@ -507,6 +846,54 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
 
     return () => clearInterval(interval);
   }, [activeTab, selectedTopic]);
+
+  // Self-healing effect for Azota Leaderboard in case page switches without direct submission (or refresh)
+  useEffect(() => {
+    if (activeTab === 'exam_result' && examSavedResult && examLeaderboard.length === 0) {
+      const totalQs = mockQuestions.length > 0 ? mockQuestions.length : examSavedResult.total;
+      const finalScore = examSavedResult.score;
+      const correctCount = examSavedResult.correctCount;
+      const timeSpentStr = examSavedResult.timeSpent || "12 phút 30 giây";
+      
+      let timeSpentSec = 750;
+      try {
+        const parts = timeSpentStr.split(" phút ");
+        if (parts.length === 2) {
+          const mins = parseInt(parts[0], 10);
+          const secs = parseInt(parts[1].split(" giây")[0], 10);
+          timeSpentSec = mins * 60 + secs;
+        }
+      } catch (e) {}
+
+      const virtuals = generateMockCompetitors(totalQs, finalScore, timeSpentSec);
+      const userCompetitor = {
+        name: "Bạn (Cá nhân)",
+        className: currentSubject === 'vnu1001' 
+          ? "Kỳ thi thử Kỹ năng số" 
+          : currentSubject === 'pldc'
+            ? "Kỳ thi Pháp luật đại cương"
+            : currentSubject === 'mldg'
+              ? "Kỳ thi Đo lường đánh giá"
+              : "Kỳ thi Tâm lý học",
+        correctCount,
+        totalCount: totalQs,
+        score: finalScore,
+        timeSpentSec,
+        timeSpentStr,
+        avatarBg: "bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1 font-bold",
+        isVirtual: false,
+      };
+
+      const combined = [...virtuals, userCompetitor];
+      combined.sort((a, b) => {
+        if (Math.abs(b.score - a.score) > 0.01) return b.score - a.score;
+        return a.timeSpentSec - b.timeSpentSec;
+      });
+
+      const ranked = combined.map((item, idx) => ({ ...item, rank: idx + 1 }));
+      setExamLeaderboard(ranked);
+    }
+  }, [activeTab, examSavedResult]);
 
   // Sync state on mount
   useEffect(() => {
@@ -560,6 +947,41 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
 
       const savedMockHistory = localStorage.getItem(STORAGE_MOCK_HISTORY_KEY);
       if (savedMockHistory) setMockHistory(JSON.parse(savedMockHistory));
+
+      // --- STREAK CONFIGURATION AND REAL-TIME SYNCS ---
+      const savedReminderTime = localStorage.getItem("vnu1001_streak_reminder_time_v1");
+      if (savedReminderTime) setReminderTime(savedReminderTime);
+      const savedReminderActive = localStorage.getItem("vnu1001_streak_reminder_active_v1");
+      if (savedReminderActive) setReminderActive(savedReminderActive === "true");
+
+      const todayStr = getTodayString();
+      const savedLastDate = localStorage.getItem("vnu1001_last_active_date_v1");
+      if (savedLastDate !== todayStr) {
+        localStorage.setItem("vnu1001_last_active_date_v1", todayStr);
+        setTodayPracticedCount(0);
+        localStorage.setItem("vnu1001_today_practiced_v1", "0");
+        setTodayMockSubmitted(false);
+        localStorage.setItem("vnu1001_today_mock_submitted_v1", "false");
+        // Show motivational welcome toast for a brand new day
+        setTimeout(() => {
+          addStreakToast(`🌅 Chào mừng ngày mới! Hãy củng cố và bảo vệ Streak ${localStorage.getItem(STORAGE_STREAK_KEY) || 3} ngày của bạn hôm nay nhé.`, "info");
+        }, 1500);
+      } else {
+        const savedPracticed = localStorage.getItem("vnu1001_today_practiced_v1");
+        if (savedPracticed) setTodayPracticedCount(parseInt(savedPracticed, 10));
+        const savedMockSubbed = localStorage.getItem("vnu1001_today_mock_submitted_v1");
+        if (savedMockSubbed) setTodayMockSubmitted(savedMockSubbed === "true");
+        
+        // Friendly reminder toast if streak tasks are incomplete
+        setTimeout(() => {
+          const count = savedPracticed ? parseInt(savedPracticed, 10) : 0;
+          if (count < 3) {
+            addStreakToast(`🔥 Đừng quên hoàn thành thêm ${3 - count} câu ôn luyện để gia cố chuỗi Streak!`, "warning");
+          } else {
+            addStreakToast(`🎉 Streak của bạn hôm nay đã được bảo bọc an toàn! Tuyệt vời!`, "success");
+          }
+        }, 2000);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -651,6 +1073,11 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
         const nextStreak = current === 0 ? 1 : current + 1;
         localStorage.setItem(STORAGE_STREAK_KEY, nextStreak.toString());
         
+        // Fire celebration toast for updating the streak
+        setTimeout(() => {
+          addStreakToast(`🔥 Tuyệt vời! Bạn vừa gia cố chuỗi ngày học thành công! Streak tăng lên ${nextStreak} ngày liên tục!`, 'success');
+        }, 100);
+
         setMaxStreak(currentMax => {
           if (nextStreak > currentMax) {
             localStorage.setItem(STORAGE_MAX_STREAK_KEY, nextStreak.toString());
@@ -690,15 +1117,26 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
 
   // Save Bookmarks
   const toggleBookmark = (qId: string) => {
-    const next = bookmarkedIds.includes(qId) 
+    const isSaved = bookmarkedIds.includes(qId);
+    const next = isSaved 
       ? bookmarkedIds.filter(id => id !== qId) 
       : [...bookmarkedIds, qId];
     setBookmarkedIds(next);
     localStorage.setItem(STORAGE_BOOKMARKS_KEY, JSON.stringify(next));
+    addStreakToast(isSaved ? "📌 Đã gỡ lưu câu hỏi khỏi sổ tay!" : "📌 Đã lưu câu hỏi thành công vào sổ tay ôn tập!", "info");
   };
 
     // Record practice answer
   const handleAnswerQuestion = (q: VNUQuestion, optionIndex: number) => {
+    if (practiceExamMode) {
+      setPracticeTempAnswers(prev => ({
+        ...prev,
+        [q.id]: optionIndex
+      }));
+      setChosenOption(optionIndex);
+      return;
+    }
+
     if (chosenOption !== null) return; // limit one click
     setChosenOption(optionIndex);
     setShowExplanation(true);
@@ -715,12 +1153,19 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
       registerStudyActivity();
       setTodayPracticedCount(prev => {
         const next = prev + 1;
+        localStorage.setItem("vnu1001_today_practiced_v1", next.toString());
         if (next === 3) {
-          // Fire premium notice
           customAlert("🎉 Chúc mừng! Bạn đã trả lời đúng 3 câu trắc nghiệm hôm nay và hoàn thành mục tiêu ôn luyện để củng cố Streak!");
+          addStreakToast("🏆 Đã Đạt Mục Tiêu Ngày: Streak của bạn hôm nay đã được bảo vệ!", "success");
+        } else if (next < 3) {
+          addStreakToast(`🎯 Đúng rồi! Tiến trình rèn luyện hôm nay: ${next}/3 câu đúng.`, "success");
+        } else {
+          addStreakToast(`🎯 Câu trả lời chính xác! Tiếp tục bồi dưỡng kiến thức nhé.`, "success");
         }
         return next;
       });
+    } else {
+      addStreakToast("💡 Đáp án chưa đúng! Hãy xem phần giải thuật chi tiết để nắm vững bản chất.", "info");
     }
 
     // Increase streak dynamically for cool feedback
@@ -742,14 +1187,14 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
     const qIds = topicQs.map(q => q.id);
     
     // Check if there are any answers to reset first
-    const hasAnswers = qIds.some(id => answeredHistory[id] !== undefined);
+    const hasAnswers = qIds.some(id => answeredHistory[id] !== undefined || practiceTempAnswers[id] !== undefined);
     if (!hasAnswers) {
       customAlert("Bạn chưa làm bài nào trong chuyên đề này!");
       return;
     }
     
     const countWrong = qIds.filter(id => answeredHistory[id] !== undefined && !answeredHistory[id].correct).length;
-    if (!all && countWrong === 0) {
+    if (!all && countWrong === 0 && !practiceExamMode) {
       customAlert("Bạn không có câu trả lời sai nào trong chuyên đề này, chúc mừng!");
       return;
     }
@@ -775,6 +1220,21 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
         localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(next));
         return next;
       });
+
+      setPracticeTempAnswers(prev => {
+        const next = { ...prev };
+        qIds.forEach(id => {
+          if (all) {
+            delete next[id];
+          } else {
+            const h = answeredHistory[id];
+            if (!h || !h.correct) {
+              delete next[id];
+            }
+          }
+        });
+        return next;
+      });
       
       // Reset the study timer for this topic if resetting all
       if (all) {
@@ -790,6 +1250,7 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
       setPracticeIndex(0);
       setChosenOption(null);
       setShowExplanation(false);
+      setShowPracticeResult(false);
       
       // Move to practice tab
       setActiveTab('practice');
@@ -803,6 +1264,11 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
 
   // Reset a specific single question choice so the candidate can answer it again
   const handleRetryCurrentQuestion = (qId: string) => {
+    setPracticeTempAnswers(prev => {
+      const next = { ...prev };
+      delete next[qId];
+      return next;
+    });
     setAnsweredHistory(prev => {
       const next = { ...prev };
       delete next[qId];
@@ -829,6 +1295,29 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
     setExamTimer(1800); // 30 minutes
     setIsTimerActive(true);
     setExamSavedResult(null);
+    setCurrentOfficialExamId(null);
+    setActiveTab('mock_exam');
+  };
+
+  // Launch a pre-defined official exam
+  const handleStartOfficialExam = (exam: PLDCOfficialExam) => {
+    const mappedQuestions = exam.questions.map((cq, idx) => ({
+      id: `${exam.id}-q-${idx}`,
+      topicId: 1,
+      difficulty: 'thong_hieu' as const,
+      questionText: cq.q,
+      options: cq.o,
+      correctOption: cq.c,
+      explanation: cq.e,
+    }));
+    
+    setMockQuestions(mappedQuestions);
+    setMockAnswers({});
+    setExamSubmitted(false);
+    setExamTimer(1800); // 30 minutes
+    setIsTimerActive(true);
+    setExamSavedResult(null);
+    setCurrentOfficialExamId(exam.id);
     setActiveTab('mock_exam');
   };
 
@@ -878,17 +1367,60 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
     };
     setExamSavedResult(newResult);
 
+    // Generate Azota simulated competition leaderboard
+    const virtuals = generateMockCompetitors(mockQuestions.length, finalScore, timeSpentSec);
+    const userCompetitor = {
+      name: "Bạn (Cá nhân)",
+      className: currentSubject === 'vnu1001' 
+        ? "Kỳ thi thử Kỹ năng số" 
+        : currentSubject === 'pldc'
+          ? "Kỳ thi Pháp luật đại cương"
+          : currentSubject === 'mldg'
+            ? "Kỳ thi Đo lường đánh giá đại học"
+            : "Kỳ thi Tâm lý học trong giáo dục",
+      correctCount: correctCount,
+      totalCount: mockQuestions.length,
+      score: finalScore,
+      timeSpentSec: timeSpentSec,
+      timeSpentStr: timeString,
+      avatarBg: "bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1 font-bold",
+      isVirtual: false,
+    };
+    
+    const combined = [...virtuals, userCompetitor];
+    combined.sort((a, b) => {
+      // sort by score descending
+      if (Math.abs(b.score - a.score) > 0.01) {
+        return b.score - a.score;
+      }
+      // then by time Spent ascending
+      return a.timeSpentSec - b.timeSpentSec;
+    });
+
+    const ranked = combined.map((item, idx) => ({
+      ...item,
+      rank: idx + 1
+    }));
+    setExamLeaderboard(ranked);
+    setLeaderboardSearchQuery('');
+
     // Save mock exam to history list
     const newHistoryItem = {
       id: "mock_exam_" + Date.now(),
       timestamp: new Date().toLocaleString('vi-VN'),
       ...newResult,
       questions: mockQuestions,
-      answers: mockAnswers
+      answers: mockAnswers,
+      examId: currentOfficialExamId
     };
 
     registerStudyActivity();
     setTodayMockSubmitted(true);
+    localStorage.setItem("vnu1001_today_mock_submitted_v1", "true");
+
+    setTimeout(() => {
+      addStreakToast(`📝 Nộp đề thi thành công! Điểm số đạt được: ${finalScore.toFixed(1)}/10đ. Đã lưu báo cáo học lực!`, "success");
+    }, 150);
 
     setMockHistory(prev => {
       const nextHistory = [newHistoryItem, ...prev].slice(0, 50); // Keep last 50
@@ -1050,7 +1582,7 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
 
   // Topic object visual definition
   const topicDetails = useMemo(() => {
-    if (currentSubject === 'vnu1001') {
+    if (currentSubject === 'vnu1050' || currentSubject === 'vnu1001') {
       return [
         { id: 1, name: "BÀI 1: Máy tính & Thiết bị ngoại vi", icon: BookOpen, accent: "from-blue-500 to-indigo-600", desc: "Phần cứng thô, RAM, SSD, CPU, NPU, cổng liên kết Thunderbolt và mạng LAN/WAN căn bản thiết bị." },
         { id: 2, name: "BÀI 2: Khai thác dữ liệu & Thông tin", icon: Sparkles, accent: "from-amber-500 to-orange-600", desc: "Mô hình tháp DIKW dữ liệu lớn, Metadata, tệp phi cấu trúc và phương pháp khai phá tri thức tự động." },
@@ -1059,7 +1591,7 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
         { id: 5, name: "BÀI 5: Thuật toán & Tư duy máy tính", icon: ShieldAlert, accent: "from-rose-500 to-red-600", desc: "Tư duy phân rã, nhận dạng mẫu, thuật toán tìm kiếm nhị phân Binary Search và độ phức tạp O(1)." },
         { id: 6, name: "BÀI 6: An toàn thông tin & Đạo đức số", icon: Flame, accent: "from-cyan-500 to-blue-600", desc: "Phòng vệ tấn công lừa đảo Social Engineering, Ransomware độc hại và quyền tác giả học thuật." }
       ];
-    } else {
+    } else if (currentSubject === 'pldc') {
       return [
         { id: 1, name: "CHƯƠNG 1: Nhà nước pháp quyền XHCN", icon: BookOpen, accent: "from-blue-500 to-indigo-600", desc: "Bản chất giai cấp và xã hội của nhà nước, sự ra đời của nhà nước pháp quyền XHCN Việt Nam, Nghị quyết số 27-NQ/TW." },
         { id: 2, name: "CHƯƠNG 2: Bộ máy, chức năng và hình thức", icon: Sparkles, accent: "from-amber-500 to-orange-600", desc: "Cơ cấu hệ thống chính trị, Quốc hội, Chính phủ, Tòa án, Viện kiểm sát nhân dân, hình thức chính thể và cấu trúc nhà nước đơn nhất." },
@@ -1067,6 +1599,22 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
         { id: 4, name: "CHƯƠNG 4: Quy phạm và quan hệ pháp luật", icon: Timer, accent: "from-purple-500 to-pink-600", desc: "Giả định, quy định, chế tài, năng lực pháp luật và năng lực hành vi dân sự của cá nhân, hình thức thực hiện pháp luật." },
         { id: 5, name: "CHƯƠNG 5: Ý thức, vi phạm và trách nhiệm", icon: ShieldAlert, accent: "from-rose-500 to-red-600", desc: "Mặt khách quan và chủ quan của vi phạm, lỗi cố ý và vô ý, bồi thường thiệt hại dân sự, trách nhiệm hình sự v.v." },
         { id: 6, name: "CHƯƠNG 6: Các ngành luật cơ bản ở Việt Nam", icon: Flame, accent: "from-cyan-500 to-blue-600", desc: "Luật Hiến pháp, Luật Hành chính, Luật Dân sự, Luật Hình sự, Luật Tố tụng, Luật Hôn nhân & Gia đình, Bộ luật Lao động chuẩn chỉnh." }
+      ];
+    } else if (currentSubject === 'tlhgd') {
+      return [
+        { id: 1, name: "CHƯƠNG 1: Hiện tượng tâm lý và phương pháp nghiên cứu", icon: BookOpen, accent: "from-blue-500 to-indigo-600", desc: "Bản chất, nguồn gốc khách quan và cấu trúc của tâm lý người, cùng các phương pháp nghiên cứu tâm lý khoa học sòng phẳng." },
+        { id: 2, name: "CHƯƠNG 2 & 3: Yếu tố sinh học & Hoạt động - Giao tiếp", icon: Sparkles, accent: "from-amber-500 to-orange-600", desc: "Hệ thần kinh, phản xạ có/không điều kiện, và hoạt động chủ đạo theo lứa tuổi dậy thì thiếu niên từ mầm non đến THPT." },
+        { id: 3, name: "CHƯƠNG 4 & 5: Quá trình nhận thức và điều kiện", icon: CheckCircle2, accent: "from-emerald-500 to-teal-600", desc: "Cảm giác, tri giác trọn vẹn, trí nhớ, ngôn ngữ thầm nội tâm, ảo giác và các thuộc tính tập trung của Chú ý." },
+        { id: 4, name: "CHƯƠNG 6 & 7: Tình cảm - Ý chí & Nhân cách", icon: Timer, accent: "from-purple-500 to-pink-600", desc: "Sáu quy luật tình cảm (lây lan, pha trộn, di chuyển, thích ứng, tương phản), hành động ý chí đấu tranh động cơ và thuộc tính khí chất nhân cách." },
+        { id: 5, name: "CHƯƠNG 8 & 9: Tâm lý hoạt động học và dạy học", icon: ShieldAlert, accent: "from-rose-500 to-red-600", desc: "Động cơ học tập nội tại bên trong, lý thuyết Piaget phát triển trí tuệ, thuyết ZPD Vygotsky, phong cách dân chủ và độc đoán sư phạm giáo viên." },
+        { id: 6, name: "CHƯƠNG 10-12: Môi trường, Đạo đức & Tham vấn học đường", icon: Flame, accent: "from-cyan-500 to-blue-600", desc: "Nhân cách nhà giáo đức tài, tham vấn gỡ rối bạo lực học đường trầm cảm, hỗ trợ trẻ hòa nhập tự kỷ, trí tuệ cảm xúc EQ & Growth Mindset." }
+      ];
+    } else {
+      return [
+        { id: 1, name: "CHƯƠNG 1: Khái niệm & Lịch sử đo lường đánh giá", icon: BookOpen, accent: "from-blue-500 to-indigo-600", desc: "Các thuật ngữ đo lường, đánh giá, kiểm tra, lịch sử phát triển, học thuyết trắc nghiệm cổ điển và lý thuyết hiện đại." },
+        { id: 2, name: "CHƯƠNG 2: Lập kế hoạch kiểm tra đánh giá", icon: Sparkles, accent: "from-amber-500 to-orange-600", desc: "Xây dựng ma trận đề, Bản đặc tả đề kiểm tra trắc nghiệm và tự luận (Test Specification), các dải tiêu chí Rubric chuẩn." },
+        { id: 3, name: "CHƯƠNG 3: Các nội dung đánh giá trong giáo dục", icon: CheckCircle2, accent: "from-emerald-500 to-teal-600", desc: "Mô hình dải chất lượng CIPO, đánh giá quá trình (Formative), đánh giá tổng kết (Summative), tự đánh giá (IQA) và kiểm định ngoài." },
+        { id: 4, name: "CHƯƠNG 4: Phân tích & Sử dụng kết quả đánh giá", icon: Timer, accent: "from-purple-500 to-pink-600", desc: "Phân tích câu hỏi (độ khó P, độ phân biệt D, rpbi), lý thuyết phản hồi câu đặc ICC (IRT), độ tin cậy Alpha, độ giá trị." }
       ];
     }
   }, [currentSubject]);
@@ -1078,15 +1626,27 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
       <header className="h-16 bg-slate-900 px-4 sm:px-8 flex items-center justify-between shrink-0 text-white shadow-md border-b border-slate-800 z-10 animate-fade-in print:hidden" id="vnu-header">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <div className="p-1 px-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-black text-xs sm:text-sm tracking-tight shadow-md shadow-blue-500/30 shrink-0">
-            {currentSubject === 'vnu1001' ? "VNU1001" : "PLDC"}
+            {currentSubject === 'vnu1001' ? "VNU1001" : currentSubject === 'pldc' ? "PLDC" : currentSubject === 'mldg' ? "MLDG" : "TLHGD"}
           </div>
           <div className="truncate hidden md:block">
             <h1 className="text-xs sm:text-sm font-black tracking-wide uppercase text-white leading-none truncate">
-              {currentSubject === 'vnu1001' ? "Cổng Ôn Thi Trắc Nghiệm Kỹ Năng Số" : "Cổng Ôn Thi Pháp Luật Đại Cương"}
+              {currentSubject === 'vnu1001' 
+                ? "Cổng Ôn Thi Trắc Nghiệm Kỹ Năng Số" 
+                : currentSubject === 'pldc' 
+                  ? "Cổng Ôn Thi Pháp Luật Đại Cương" 
+                  : currentSubject === 'mldg'
+                    ? "Cổng Ôn Thi Nhập Môn Đo Lường Đánh Giá"
+                    : "Cổng Ôn Thi Tâm Lý Học Trong Giáo Dục"}
             </h1>
             <p className="text-[9px] sm:text-[10px] text-slate-400 font-bold truncate mt-1">
-              {fullDatabase.length > 200 
-                ? `${currentSubject === 'vnu1001' ? "Giáo trình 600 câu chuẩn" : "Giáo trình trắc nghiệm pháp luật tối ưu"}`
+              {fullDatabase.length > 50 
+                ? `${currentSubject === 'vnu1001' 
+                    ? "Giáo trình 600 câu chuẩn" 
+                    : currentSubject === 'pldc' 
+                      ? "Giáo trình trắc nghiệm pháp luật tối ưu" 
+                      : currentSubject === 'mldg'
+                        ? "Giáo trình đo lường đánh giá giáo dục 400 câu chuẩn"
+                        : "Giáo trình tâm lý học trong giáo dục 250 câu chuẩn"}`
                 : `Đang ôn luyện đề thi tự nạp của riêng bạn (${fullDatabase.length} câu)`}
             </p>
           </div>
@@ -1096,11 +1656,13 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
             <span className="hidden sm:inline pl-1 text-[9px] uppercase font-black tracking-wider text-slate-400">Phần học:</span>
             <select
               value={currentSubject}
-              onChange={(e) => handleSwitchSubject(e.target.value as 'vnu1001' | 'pldc')}
+              onChange={(e) => handleSwitchSubject(e.target.value as 'vnu1050' | 'pldc' | 'mldg' | 'tlhgd' | any)}
               className="bg-transparent text-slate-200 text-xs font-black py-1.5 px-1 outline-none cursor-pointer focus:ring-0 transition"
             >
               <option value="vnu1001" className="bg-slate-900 text-white font-bold">💻 Kỹ Năng Số (VNU1001)</option>
               <option value="pldc" className="bg-slate-900 text-white font-bold">⚖️ Pháp Luật Đại Cương</option>
+              <option value="mldg" className="bg-slate-900 text-white font-bold">📊 Đo Lường Đánh Giá Giáo Dục</option>
+              <option value="tlhgd" className="bg-slate-900 text-white font-bold">🧠 Tâm Lý Học Trong Giáo Dục</option>
             </select>
           </div>
         </div>
@@ -1127,6 +1689,28 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                 <span className="text-[9.5px] font-extrabold uppercase text-slate-300 hidden lg:inline">Học Đêm (Tối)</span>
               </div>
             )}
+          </button>
+
+          {/* SHUFFLE TOGGLE BUTTON */}
+          <button
+            onClick={() => {
+              const nextShuffle = !shuffleOptions;
+              setShuffleOptions(nextShuffle);
+              localStorage.setItem("vnu1001_shuffle_options_v1", nextShuffle ? "true" : "false");
+            }}
+            className={`flex items-center justify-center p-2 rounded-xl border transition cursor-pointer ${
+              shuffleOptions
+                ? "bg-emerald-950/40 border-emerald-500/55 text-emerald-400 hover:bg-emerald-900/30 font-black"
+                : "bg-slate-800 border-slate-700 hover:bg-slate-700 hover:border-slate-600 text-slate-400"
+            }`}
+            title={shuffleOptions ? "Đảo đáp án đang Bật" : "Đảo đáp án đang Tắt (Thứ tự gốc A-B-C-D)"}
+          >
+            <div className="flex items-center gap-1.5 px-0.5">
+              <Shuffle className={`w-3.5 h-3.5 ${shuffleOptions ? "text-emerald-400 animate-pulse animate-spin" : "text-slate-400"}`} />
+              <span className="text-[9.5px] font-extrabold uppercase hidden lg:inline">
+                Đảo đáp án: {shuffleOptions ? "Bật" : "Tắt"}
+              </span>
+            </div>
           </button>
 
           <div className="flex items-center gap-1 text-xs bg-slate-800 border border-slate-700 px-2 sm:px-3 py-1.5 rounded-xl select-none" title="Chuỗi ngày học liên tục">
@@ -1234,7 +1818,7 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                 <div className="bg-gradient-to-br from-slate-900 to-slate-950 p-6 rounded-3xl text-white shadow-xl flex flex-col justify-between">
                   <div className="space-y-1">
                     <span className="text-[9px] bg-blue-600 text-white font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider w-fit block mb-1">Thi thử mock</span>
-                    <h4 className="text-sm font-extrabold">{fullDatabase === getFullVNU1001Database() ? (currentSubject === 'vnu1001' ? "Đề Chuẩn VNU1001" : "Đề Chuẩn Pháp Luật ĐC") : "Đề Nhập Tự Do"}</h4>
+                    <h4 className="text-sm font-extrabold">{fullDatabase === getFullVNU1001Database() ? (currentSubject === 'vnu1001' ? "Đề Chuẩn VNU1001" : currentSubject === 'pldc' ? "Đề Chuẩn Pháp Luật ĐC" : "Đề Chuẩn Đo Lường ĐG") : "Đề Nhập Tự Do"}</h4>
                     <p className="text-[10px] text-slate-400 font-semibold">{Math.min(40, fullDatabase.length)} câu hỏi tích hợp random, 30 phút</p>
                   </div>
                   <button
@@ -1511,6 +2095,174 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                         </div>
                       </div>
                     </div>
+
+                    {/* Interactive Daily Streak Reminder & Scheduler Panel */}
+                    <div className="bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 p-5 rounded-3xl border border-indigo-500/15 shadow-xl text-white space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] bg-orange-500/10 text-orange-400 border border-orange-500/20 font-black px-2.5 py-1 rounded-md uppercase tracking-wider flex items-center gap-1.5 shadow-inner">
+                          <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500 animate-pulse" /> NHẮC NHỞ STREAK
+                        </span>
+                        
+                        {todayPracticedCount >= 3 ? (
+                          <span className="text-[9px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-black px-2 py-0.5 rounded uppercase flex items-center gap-1.5 shadow">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400" /> AN TOÀN
+                          </span>
+                        ) : (
+                          <span className="text-[9px] bg-red-500/15 text-red-400 border border-red-500/30 font-black px-2 py-0.5 rounded uppercase flex items-center gap-1.5 animate-pulse shadow">
+                            <AlertCircle className="w-3 h-3 text-red-400" /> CẦN DUY TRÌ
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-1 bg-white/2 p-2 rounded-2xl">
+                        <h4 className="text-xs font-black text-slate-150 uppercase tracking-tight flex items-center gap-1.5">
+                          Kỷ Luật Học Tập Hàng Ngày
+                        </h4>
+                        <p className="text-[10.5px] text-slate-450 font-semibold leading-relaxed">
+                          {todayPracticedCount >= 3 
+                            ? "🎉 Tuyệt vời! Bạn đã hoàn thành 3 câu luyện tập để bảo vệ Streak cho hôm nay. Ngày mai tiếp tục nhé!"
+                            : `⏳ Bạn còn thiếu ${3 - todayPracticedCount} câu trắc nghiệm đúng nữa để duy trì streak ${streakDays} ngày liên tiếp!`
+                          }
+                        </p>
+                      </div>
+
+                      {/* Interactive Steps indicators with quick-action buttons */}
+                      <div className="space-y-2 pt-1 font-sans">
+                        <div className="flex items-center justify-between text-xs p-3 rounded-2xl bg-white/5 border border-white/5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-black border border-emerald-500/20">
+                              ✓
+                            </div>
+                            <span className="text-[11px] font-bold text-slate-200">Đăng nhập cổng VNU1001</span>
+                          </div>
+                          <span className="text-[9px] text-slate-400 font-black tracking-widest">OK</span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs p-3 rounded-2xl bg-white/5 border border-white/5">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black border ${
+                              todayPracticedCount >= 3 
+                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/25' 
+                                : 'bg-orange-500/20 text-orange-400 border-orange-500/25 animate-pulse'
+                            }`}>
+                              {todayPracticedCount >= 3 ? "✓" : "2"}
+                            </div>
+                            <span className="text-[11px] font-bold text-slate-200">Đúng 3 câu ôn luyện ({todayPracticedCount}/3)</span>
+                          </div>
+                          {todayPracticedCount >= 3 ? (
+                            <span className="text-[9px] text-emerald-400 font-black tracking-wider">Xong</span>
+                          ) : (
+                            <button 
+                              onClick={() => {
+                                setSelectedTopic(1);
+                                setPracticeIndex(0);
+                                setChosenOption(null);
+                                setShowExplanation(false);
+                                setActiveTab('practice');
+                                addStreakToast("📖 Hãy rèn luyện kiến thức và trả lời đúng 3 câu trắc nghiệm nhé!", "info");
+                              }}
+                              className="text-[9.5px] bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-3 py-1.5 rounded-xl transition cursor-pointer select-none active:translate-y-0.5 border-none outline-none"
+                            >
+                              HỌC NGAY
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs p-3 rounded-2xl bg-white/5 border border-white/5">
+                          <div className="flex items-center gap-2 font-semibold">
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black border ${
+                              (todayMockSubmitted || pomoCompletedSessions > 0) 
+                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/25' 
+                                : 'bg-slate-800 text-slate-450 border-slate-700'
+                            }`}>
+                              {(todayMockSubmitted || pomoCompletedSessions > 0) ? "✓" : "3"}
+                            </div>
+                            <span className="text-[11px] font-bold text-slate-200">Thi thử hoặc 1 Pomodoro</span>
+                          </div>
+                          {(todayMockSubmitted || pomoCompletedSessions > 0) ? (
+                            <span className="text-[9px] text-emerald-400 font-black tracking-wider">Xong</span>
+                          ) : (
+                            <div className="flex gap-1">
+                              <button 
+                                onClick={() => {
+                                  handleStartMockExam();
+                                  addStreakToast("📝 Hãy chọn 1 đề thi thử học kỳ để rèn luyện tư duy phản biện nhé!", "info");
+                                }}
+                                className="text-[9.5px] bg-slate-800 hover:bg-slate-750 text-slate-200 font-extrabold px-2 py-1.5 rounded-xl transition cursor-pointer select-none active:translate-y-0.5 border-none outline-none"
+                              >
+                                THI THỬ
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Interactive Streak Scheduler Widget */}
+                      <div className="mt-4 pt-4 border-t border-slate-800/85 space-y-3">
+                        <label className="text-[9px] font-black text-indigo-300 uppercase tracking-widest block font-mono">
+                          ⚙️ Cấu Hình Giờ Nhắc Nhở Học Tập
+                        </label>
+                        
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <span className="text-[8.5px] text-slate-450 font-black uppercase tracking-wider block">Mốc thời gian</span>
+                            <select
+                              value={reminderTime}
+                              onChange={(e) => {
+                                setReminderTime(e.target.value);
+                                localStorage.setItem("vnu1001_streak_reminder_time_v1", e.target.value);
+                                addStreakToast(`⏰ Hệ thống sẽ nhắc nhở rèn luyện học tập vào lúc ${e.target.value} mỗi ngày!`, "info");
+                              }}
+                              className="w-full text-xs font-bold text-slate-200 bg-slate-900 border border-slate-800 rounded-xl py-2 px-2.5 cursor-pointer outline-none focus:border-indigo-500 transition shadow-inner"
+                            >
+                              <option value="08:00">08:00 Sáng</option>
+                              <option value="12:00">12:00 Trưa</option>
+                              <option value="18:00">18:00 Chiều</option>
+                              <option value="20:00">20:00 Tối</option>
+                              <option value="21:30">21:30 Đêm</option>
+                              <option value="22:00">22:00 Đêm</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <span className="text-[8.5px] text-slate-450 font-black uppercase tracking-wider block">Yêu cầu báo</span>
+                            <button
+                              onClick={() => {
+                                const nextActive = !reminderActive;
+                                setReminderActive(nextActive);
+                                localStorage.setItem("vnu1001_streak_reminder_active_v1", nextActive.toString());
+                                addStreakToast(nextActive ? "🔔 Đã BẬT chuông thông báo đẩy nhắc nhở Streak!" : "🔕 Đã TẮT chuông nhắc nhở Streak.", "info");
+                              }}
+                              className={`w-full text-xs font-bold py-2 px-2.5 rounded-xl transition cursor-pointer text-center flex items-center justify-center gap-1.5 border select-none border-transparent ${
+                                reminderActive 
+                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/15" 
+                                  : "bg-slate-900 text-slate-500 border-slate-800 hover:bg-slate-850"
+                              }`}
+                            >
+                              {reminderActive ? "🔔 BẬT NHẮC" : "🔕 TẮT NHẮC"}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Quick trigger test notification button */}
+                        <div className="pt-1.5 select-none">
+                          <button
+                            onClick={() => {
+                              const msgs = [
+                                `⏰ KỶ LUẬT STREAK: Hôm nay bạn ôn bài chưa? Đừng bỏ rơi mục tiêu học tập VNU1001 ngày hôm nay nhé!`,
+                                `🔥 CẢNH BÁO STREAK: Chuỗi vàng ${streakDays} ngày học liên hoàn của bạn sắp hết kỳ hạn! Ôn tập 3 câu ngay để bảo vệ chuỗi nào!`,
+                                `🌟 TRÁCH NHIỆM: Kỷ luật là nền tảng của sự bứt phá! Nhấp ngay học 3 câu trắc nghiệm siêu tốc bảo vệ streak.`
+                              ];
+                              const randomMsg = msgs[Math.floor(Math.random() * msgs.length)];
+                              addStreakToast(randomMsg, "warning");
+                            }}
+                            className="w-full text-center py-2.5 rounded-xl bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-white border border-slate-800 text-[10px] font-black tracking-widest font-mono transition cursor-pointer uppercase shadow-sm active:translate-y-0.5"
+                          >
+                            🔔 Phát thử thông báo đẩy mẫu
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Right Column: List of mock exam attempts */}
@@ -1677,6 +2429,7 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                                 setPracticeIndex(0);
                                 setChosenOption(null);
                                 setShowExplanation(false);
+                                setShowPracticeResult(false);
                                 setPracticeDifficulty('all');
                                 setActiveTab('practice');
                               }}
@@ -1691,6 +2444,92 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                   })}
                 </div>
               </div>
+
+              {/* SECTION: 15 OFFICIAL EXAMS FOR PLDC */}
+              {currentSubject === 'pldc' && (
+                <div id="pldc-exams-section" className="space-y-5 pt-8 border-t border-slate-200 mt-8">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                        <Award className="w-5 h-5 text-emerald-600 shrink-0" />
+                        Trọn bộ 15 đề thi học kỳ Pháp luật đại cương
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium">Bản quyền 15 đề thi thử chất lượng cao, có đáp án chi tiết và đồng hồ đếm ngược 30 phút rèn áp lực cực chuẩn</p>
+                    </div>
+                    
+                    {/* Search filter input */}
+                    <div className="relative shrink-0 w-full sm:w-64">
+                      <input 
+                        type="text"
+                        placeholder="Tìm kiếm đề thi..."
+                        value={pldcSearchQuery}
+                        onChange={(e) => setPldcSearchQuery(e.target.value)}
+                        className="w-full text-xs font-semibold px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 transition shadow-inner"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {filteredOfficialExams.map(exam => {
+                      const examStat = getExamStats(exam.id);
+                      return (
+                        <div 
+                          key={exam.id}
+                          className="bg-white rounded-3xl border border-slate-200 hover:border-emerald-500/55 transition duration-205 flex flex-col justify-between p-5 space-y-4 relative overflow-hidden shadow-sm"
+                        >
+                          {/* Top badge or decor line */}
+                          <div className="flex justify-between items-start gap-2">
+                            <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-100 font-extrabold px-2 py-0.5 rounded uppercase tracking-wider block">
+                              ĐỀ SỐ {exam.testId}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-bold block">
+                              40 Câu • 30 Phút
+                            </span>
+                          </div>
+
+                          <div className="space-y-1">
+                            <h4 className="text-sm font-black text-slate-900 line-clamp-1 hover:text-emerald-700 transition">
+                              {exam.title}
+                            </h4>
+                            <p className="text-[11px] text-slate-500 font-medium leading-relaxed line-clamp-2">
+                              {exam.description}
+                            </p>
+                          </div>
+
+                          {/* Stats section if attempted */}
+                          <div className="pt-3.5 border-t border-slate-100/80 flex justify-between items-center text-xs">
+                            {examStat.attempts > 0 ? (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md ${
+                                  examStat.passed ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {examStat.passed ? 'ĐÃ ĐẠT' : 'CHƯA ĐẠT'}
+                                </span>
+                                <span className="text-[10px] text-slate-500 font-bold">
+                                  Cao nhất: <strong className="text-slate-800">{examStat.highScore?.toFixed(1)}/10đ</strong>
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 italic font-semibold">
+                                Chưa làm đề thi này
+                              </span>
+                            )}
+
+                            <button
+                              onClick={() => {
+                                handleStartOfficialExam(exam);
+                              }}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black py-2 px-3.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 border-b-2 border-emerald-800 active:translate-y-0.5"
+                            >
+                              VÀO THI <ArrowRight className="w-3 h-3 shrink-0" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -1715,6 +2554,63 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                 <div className="space-y-1.5 pb-4 border-b border-slate-100">
                   <span className="text-[10px] bg-blue-50 text-blue-600 font-extrabold px-2.5 py-1 rounded-md block w-fit uppercase">VỊ TRÍ ÔN TẬP</span>
                   <h3 className="text-sm font-black text-slate-900 leading-snug">{VNU_TOPICS[selectedTopic - 1]}</h3>
+                </div>
+
+                {/* PRACTICE MODE SELECTOR */}
+                <div className="bg-slate-50 p-4.5 rounded-2xl border border-slate-200/60 space-y-3">
+                  <div className="flex items-center justify-between text-[10px] uppercase font-black tracking-widest text-slate-500 select-none">
+                    <span className="flex items-center gap-1">
+                      <Target className="w-3.5 h-3.5 text-indigo-500" /> Chế độ luyện tập
+                    </span>
+                    <span className="text-[8px] bg-emerald-100 text-emerald-800 font-black px-1.5 py-0.5 rounded uppercase font-bold">Mới</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (practiceExamMode) {
+                          setPracticeExamMode(false);
+                          addStreakToast("⚡ Đã bật: Xem đáp án/giải thích ngay lập tức!", "info");
+                        }
+                      }}
+                      className={`p-3 rounded-xl border text-left flex flex-col gap-0.5 transition cursor-pointer select-none ${
+                        !practiceExamMode 
+                          ? "bg-white border-blue-500 shadow-sm ring-1 ring-blue-505/10" 
+                          : "bg-slate-50 border-slate-200/60 hover:bg-slate-100/60"
+                      }`}
+                    >
+                      <span className={`text-[10.5px] font-black ${!practiceExamMode ? "text-blue-600" : "text-slate-700"}`}>
+                        ⚡ Instant Answer (Xem Giải Thích Ngay)
+                      </span>
+                      <span className="text-[9px] text-slate-450 leading-normal font-semibold">
+                        Hiển thị lời giải chi tiết và tính đúng sai tức thì sau khi chọn đáp án.
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!practiceExamMode) {
+                          setPracticeExamMode(true);
+                          setPracticeTempAnswers({});
+                          addStreakToast("📝 Đã bật Chế độ Thi Thử: Nhớ ấn [Nộp Bài] sau khi xong nhé!", "warning");
+                        }
+                      }}
+                      className={`p-3 rounded-xl border text-left flex flex-col gap-0.5 transition cursor-pointer select-none ${
+                        practiceExamMode 
+                          ? "bg-white border-indigo-600 shadow-sm ring-1 ring-indigo-505/10" 
+                          : "bg-slate-50 border-slate-200/60 hover:bg-slate-100/60"
+                      }`}
+                    >
+                      <span className={`text-[10.5px] font-black ${practiceExamMode ? "text-indigo-650" : "text-slate-800"}`}>
+                        📝 Exam Simulation (Nộp Bài Mới Chấm Điểm)
+                      </span>
+                      <span className="text-[9px] text-slate-450 leading-normal font-semibold">
+                        Hoàn toàn ẩn đúng sai và đáp án trong khi rèn luyện. Điểm số, bảng xếp hạng sẽ hiển thị khi bạn nộp bài.
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* PRACTICE RE-LEARN AND RESET CONTROLS */}
@@ -1824,11 +2720,21 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                     <div className="grid grid-cols-5 gap-2 max-h-72 overflow-y-auto pr-1">
                       {filteredPracticeQuestions.map((q, idx) => {
                         const historyItem = answeredHistory[q.id];
+                        const tempAnswer = practiceTempAnswers[q.id];
                         const isCurrent = idx === practiceIndex;
                         let bgStyle = "bg-slate-50 text-slate-550 hover:bg-slate-100";
 
                         if (isCurrent) {
                           bgStyle = "bg-blue-600 text-white scale-105 border border-blue-500 font-black shadow";
+                        } else if (practiceExamMode) {
+                          if (tempAnswer !== undefined) {
+                            bgStyle = "bg-indigo-100 text-indigo-850 hover:bg-indigo-200 border border-indigo-250 font-black shadow-sm";
+                          } else if (historyItem) {
+                            // If they already submitted or answered previously
+                            bgStyle = historyItem.correct 
+                              ? "bg-emerald-50/60 text-emerald-700/65 border border-emerald-150/40" 
+                              : "bg-red-50/60 text-red-700/65 border border-red-150/40";
+                          }
                         } else if (historyItem) {
                           bgStyle = historyItem.correct 
                             ? "bg-emerald-50 text-emerald-700 border border-emerald-150" 
@@ -2163,7 +3069,7 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                         }}
                         className={`flex-1 py-1.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1 shadow-sm cursor-pointer ${
                           pomoIsActive 
-                            ? "bg-amber-500 hover:bg-amber-600 text-white" 
+                            ? "bg-amber-50 hover:bg-amber-600 text-white" 
                             : "bg-indigo-600 hover:bg-indigo-700 text-white"
                         }`}
                       >
@@ -2173,7 +3079,7 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                           </>
                         ) : (
                           <>
-                            <Play className="w-3.5 h-3.5 fill-white" /> Khởi chạy
+                            <Play className="w-3.5 h-3.5 fill-white" /> Khởi động
                           </>
                         )}
                       </button>
@@ -2181,25 +3087,13 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                       <button
                         type="button"
                         onClick={() => {
-                          setPomoIsActive(false);
                           setPomoTimeLeft(pomoMinutes * 60);
-                          setPomoMode('focus');
+                          setPomoIsActive(false);
                         }}
-                        className="p-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl transition cursor-pointer"
-                        title="Đặt lại phiên học"
+                        className="py-1.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-205 border border-slate-200 text-slate-705 hover:text-slate-900 transition flex items-center justify-center shadow-sm cursor-pointer"
+                        title="Reset Timer"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          playPomoSound();
-                        }}
-                        className="p-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl transition cursor-pointer"
-                        title="Thử âm thanh báo"
-                      >
-                        <Volume2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -2222,23 +3116,212 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
               {/* Right Column: Question Display Card */}
               <div className="lg:col-span-8 bg-white rounded-3xl border border-slate-200 shadow-md p-8 relative min-h-[500px] flex flex-col justify-between">
                 
-                {filteredPracticeQuestions.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-4">
-                    <AlertCircle className="w-12 h-14 text-slate-400" />
+                {showPracticeResult ? (
+                  <div className="flex-1 flex flex-col justify-between space-y-6">
+                    {/* Header */}
+                    <div className="flex justify-between items-start pb-4 border-b border-slate-100">
+                      <div>
+                        <span className="text-[10px] bg-emerald-100 text-emerald-850 font-black px-2.5 py-1 rounded-md uppercase tracking-wider select-none">
+                          KẾT QUẢ ÔN TẬP CHUYÊN ĐỀ
+                        </span>
+                        <h3 className="text-sm font-black text-slate-900 mt-2 leading-snug">
+                          {VNU_TOPICS[selectedTopic - 1]}
+                        </h3>
+                        <p className="text-[11px] text-slate-500 font-bold mt-1">Hệ thống ghi nhận và đối chiếu kết quả ôn luyện của bạn tại Azota</p>
+                      </div>
+                      <button
+                        onClick={() => setShowPracticeResult(false)}
+                        className="text-[11px] font-black text-slate-600 hover:text-slate-900 transition flex items-center gap-1 bg-slate-100 hover:bg-slate-205 py-2 px-3 rounded-xl cursor-pointer shadow-sm border border-slate-200/40"
+                      >
+                        Quay lại câu hỏi
+                      </button>
+                    </div>
+                    {(() => {
+                      const totalCount = filteredPracticeQuestions.length;
+                      const answeredCount = filteredPracticeQuestions.filter(q => answeredHistory[q.id] !== undefined).length;
+                      const correctCount = filteredPracticeQuestions.filter(q => answeredHistory[q.id]?.correct).length;
+                      const wrongCount = answeredCount - correctCount;
+                      const unansweredCount = totalCount - answeredCount;
+                      const accuracyRate = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
+                      const score = totalCount > 0 ? (correctCount / totalCount) * 10 : 0;
+                      const passed = score >= 5.0;
+
+                      return (
+                        <div className="space-y-6 flex-1">
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                            {/* Estimated score panel */}
+                            <div className="md:col-span-5 flex flex-col items-center justify-center p-6 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-150/40 text-center shadow-inner relative overflow-hidden group">
+                              <div className="w-14 h-14 rounded-full bg-white/50 flex items-center justify-center border border-indigo-200 shadow-sm mb-3">
+                                <Trophy className="w-7 h-7 text-indigo-600 animate-bounce" />
+                              </div>
+                              <span className="text-[9px] text-indigo-400 font-extrabold uppercase tracking-widest block mb-1">Điểm số ước tính</span>
+                              <span className="text-3xl font-black text-indigo-950 font-mono">{score.toFixed(1)} / 10đ</span>
+                              <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md mt-3 inline-block shadow-sm ${
+                                passed ? "bg-emerald-100 text-emerald-800 border border-emerald-250" : "bg-rose-100 text-rose-800 border border-rose-250"
+                              }`}>
+                                {passed ? "ĐẠT CHỈ TIÊU" : "CẦN LÀM LẠI"}
+                              </span>
+                            </div>
+
+                            {/* Details breakdown */}
+                            <div className="md:col-span-7 grid grid-cols-2 gap-4">
+                              <div className="p-4 rounded-xl border border-slate-100 bg-emerald-50/20">
+                                <span className="text-[9px] text-emerald-650 font-black uppercase tracking-wider block">Trả lời Đúng</span>
+                                <span className="text-xl font-black text-emerald-600 mt-1 block">{correctCount} <span className="text-xs text-slate-400 font-medium font-sans">câu</span></span>
+                                <p className="text-[9.5px] text-slate-400 font-semibold mt-1">Đạt {accuracyRate}% câu hỏi</p>
+                              </div>
+
+                              <div className="p-4 rounded-xl border border-slate-100 bg-red-50/10">
+                                <span className="text-[9px] text-rose-650 font-black uppercase tracking-wider block">Trả lời Sai</span>
+                                <span className="text-xl font-black text-rose-600 mt-1 block">{wrongCount} <span className="text-xs text-slate-400 font-medium font-sans">câu</span></span>
+                                <p className="text-[9.5px] text-slate-400 font-semibold mt-1">Cần củng cố kiến thức</p>
+                              </div>
+
+                              <div className="p-4 rounded-xl border border-slate-100 bg-slate-50">
+                                <span className="text-[9px] text-slate-450 font-black uppercase tracking-wider block">Chưa rèn luyện</span>
+                                <span className="text-xl font-black text-slate-705 mt-1 block">{unansweredCount} <span className="text-xs text-slate-400 font-medium font-sans">câu</span></span>
+                                <p className="text-[9.5px] text-slate-400 font-semibold mt-1">Số câu bỏ sót</p>
+                              </div>
+
+                              <div className="p-4 rounded-xl border border-slate-100 bg-blue-50/10">
+                                <span className="text-[9px] text-blue-650 font-black uppercase tracking-wider block">Tổng số chuyên đề</span>
+                                <span className="text-xl font-black text-blue-600 mt-1 block">{totalCount} <span className="text-xs text-slate-400 font-medium font-sans">câu</span></span>
+                                <p className="text-[9.5px] text-slate-400 font-semibold mt-1">Các câu thuộc mức lọc</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Leaderboard Section */}
+                          <div className="space-y-2.5">
+                            <div className="flex justify-between items-center select-none">
+                              <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                <Trophy className="w-4 h-4 text-amber-500 fill-amber-500" /> BẢNG VÀNG THI ĐƯA CHUYÊN ĐỀ
+                              </span>
+                              <span className="text-[9px] bg-indigo-50 text-indigo-700 font-black px-2 py-0.5 rounded shadow-inner">
+                                Giả lập thi đua trực tuyến (Azota)
+                              </span>
+                            </div>
+
+                            <div className="border border-slate-150 rounded-2xl overflow-hidden max-h-[190px] overflow-y-auto bg-slate-50/50 p-2 space-y-1.5">
+                              {practiceLeaderboard.map((item) => {
+                                const isUser = !item.isVirtual;
+                                const initials = item.name.trim().split(" ").slice(-2).map((n: string) => n[0]).join("");
+                                
+                                let rankTag = <span className="text-[10px] font-mono text-slate-400 font-bold">#{item.rank}</span>;
+                                if (item.rank === 1) rankTag = <span className="text-[10px] bg-yellow-405 text-amber-955 font-black px-1 py-0.2 rounded shadow-sm">🥇 1</span>;
+                                if (item.rank === 2) rankTag = <span className="text-[10px] bg-slate-300 text-slate-800 font-black px-1 py-0.2 rounded shadow-sm">🥈 2</span>;
+                                if (item.rank === 3) rankTag = <span className="text-[10px] bg-amber-600 text-white font-black px-1 py-0.2 rounded shadow-sm">🥉 3</span>;
+
+                                return (
+                                  <div
+                                    key={item.name}
+                                    className={`p-2.5 rounded-xl border flex items-center justify-between gap-1.5 transition text-[11px] ${
+                                      isUser 
+                                        ? "bg-indigo-50/80 border-indigo-300 shadow-sm text-indigo-950 ring-1 ring-indigo-505/20 font-bold" 
+                                        : "bg-white border-slate-100 hover:border-slate-200"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="w-7 text-center shrink-0">{rankTag}</span>
+                                      <div className={`w-6 h-6 rounded-md flex items-center justify-center text-[9px] font-black shrink-0 ${item.avatarBg}`}>
+                                        {initials}
+                                      </div>
+                                      <span className={`truncate ${isUser ? "font-black text-indigo-900" : "font-semibold text-slate-850"}`}>
+                                        {item.name}
+                                      </span>
+                                    </div>
+                                    
+                                    <div className="text-right shrink-0 font-bold">
+                                      <span className={`font-black ${isUser ? "text-indigo-650" : "text-slate-800"}`}>
+                                        {item.completionRate}%
+                                      </span>
+                                      <span className="text-[8.5px] text-slate-400 block leading-none font-semibold">
+                                        {item.correctCount} câu đúng
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Footer action buttons */}
+                          <div className="pt-4 border-t border-slate-100 flex flex-wrap justify-between items-center gap-3 select-none">
+                            <button
+                              onClick={() => {
+                                setShowPracticeResult(false);
+                                setPracticeStatusFilter('wrong');
+                                setPracticeIndex(0);
+                                setChosenOption(null);
+                                setShowExplanation(false);
+                                customAlert("Hệ thống đã kích hoạt bộ lọc, hiển thị tất cả các câu làm SAI để bạn rà soát lại lỗi nhé!");
+                              }}
+                              disabled={wrongCount === 0}
+                              className={`text-[11px] font-black py-2.5 px-4 rounded-xl flex items-center gap-1 shadow-sm transition border cursor-pointer ${
+                                wrongCount > 0 
+                                  ? "bg-amber-50 border-amber-250 text-amber-800 hover:bg-amber-100"
+                                  : "bg-slate-50 text-slate-400 border-slate-200/50 cursor-not-allowed opacity-60"
+                              }`}
+                            >
+                              <AlertCircle className="w-3.5 h-3.5 animate-pulse" /> Sửa câu SAI ({wrongCount})
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                handleResetTopicPractice(true);
+                                setShowPracticeResult(false);
+                              }}
+                              className="text-[11px] font-black py-2.5 px-4 rounded-xl flex items-center gap-1 shadow-sm border border-slate-250 hover:bg-slate-100 transition cursor-pointer text-slate-700 bg-white"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" /> Reset chương
+                            </button>
+
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => setShowPracticeResult(false)}
+                                className="text-[11px] font-black bg-slate-900 border border-slate-950 text-white hover:bg-slate-950 py-2.5 px-4 rounded-xl transition cursor-pointer shadow-sm"
+                              >
+                                Tiếp tục ôn tập
+                              </button>
+                              
+                              <button
+                                onClick={() => {
+                                  setActiveTab('dashboard');
+                                }}
+                                className="text-[11px] font-black bg-blue-600 text-white hover:bg-blue-700 py-2.5 px-4 rounded-xl transition cursor-pointer shadow-sm shadow-blue-650/10"
+                              >
+                                Về bảng tổng quan
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : filteredPracticeQuestions.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-4 bg-white rounded-3xl border border-slate-200 shadow-sm">
+                    <AlertCircle className="w-12 h-14 text-slate-400/80" />
                     <h4 className="text-base font-black text-slate-800">Không có dữ liệu câu hỏi phù hợp!</h4>
                     <p className="text-xs text-slate-400">Hãy tăng khoảng lọc hoặc đổi bài học khác bên ngoài chuyên mục.</p>
                   </div>
                 ) : (() => {
                   const currentQ = filteredPracticeQuestions[practiceIndex];
+                  const shuffledInfo = getShuffledOptions(currentQ, shuffleOptions);
                   const alreadyAnsweredItem = answeredHistory[currentQ.id];
-                  const hasResolved = chosenOption !== null || alreadyAnsweredItem !== undefined;
-                  const currentCorrectOption = currentQ.correctOption;
-                  const activeChosen = chosenOption !== null ? chosenOption : (alreadyAnsweredItem ? alreadyAnsweredItem.chosenOption : null);
+                  
+                  // In exam simulation, hide correct answers/explanations until submitted (merging to history)
+                  const showInstantFeedback = !practiceExamMode || alreadyAnsweredItem !== undefined;
+                  const hasResolved = showInstantFeedback && (chosenOption !== null || alreadyAnsweredItem !== undefined);
+                  
+                  // For styling selected option (shows blue/indigo choice in exam, red/green in instant)
+                  const activeChosenOriginal = hasResolved 
+                    ? (chosenOption !== null ? chosenOption : (alreadyAnsweredItem ? alreadyAnsweredItem.chosenOption : null))
+                    : (practiceTempAnswers[currentQ.id] !== undefined ? practiceTempAnswers[currentQ.id] : null);
 
-                  let diffColor = "bg-teal-50 text-teal-605 border-teal-200/50";
+                  let diffColor = "bg-teal-50 text-teal-650 border-teal-200/50";
                   let diffLabel = "NHẬN BIẾT";
                   if (currentQ.difficulty === 'thong_hieu') {
-                    diffColor = "bg-blue-50 text-blue-705 border-blue-200/50";
+                    diffColor = "bg-blue-50 text-blue-700 border-blue-200/50";
                     diffLabel = "THÔNG HIỂU";
                   } else if (currentQ.difficulty === 'van_dung') {
                     diffColor = "bg-amber-50 text-amber-705 border-amber-200/50";
@@ -2251,14 +3334,19 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                   const alphabets = ["A", "B", "C", "D"];
 
                   return (
-                    <>
+                    <div className="flex-1 flex flex-col bg-white rounded-3xl border border-slate-250/60 p-8 shadow-sm">
                       {/* Top bar indicators */}
-                      <div className="flex items-center justify-between pb-5 border-b border-slate-100">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-slate-400 font-extrabold">CÂU {practiceIndex + 1} / {filteredPracticeQuestions.length}</span>
+                      <div className="flex items-center justify-between pb-5 border-b border-slate-100 select-none">
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="text-[10px] text-slate-500 font-extrabold font-mono bg-slate-100 py-1 px-2.5 rounded-lg">CÂU {practiceIndex + 1} / {filteredPracticeQuestions.length}</span>
                           <span className={`text-[9px] font-extrabold px-2.5 py-1 border rounded-lg ${diffColor}`}>
                             {diffLabel}
                           </span>
+                          {practiceExamMode && !alreadyAnsweredItem && (
+                            <span className="text-[9px] bg-indigo-50 text-indigo-750 border border-indigo-200/50 rounded-lg px-2.5 py-1 font-black animate-pulse select-none">
+                              📝 CHẾ ĐỘ THI THỬ (ẨN ĐÁP ÁN)
+                            </span>
+                          )}
                         </div>
 
                         {/* Star bookmark element */}
@@ -2279,9 +3367,10 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
 
                         {/* Options block */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {currentQ.options.map((opt, optIdx) => {
-                            const isThisTarget = activeChosen === optIdx;
-                            const isCorrectAnswerIdx = currentCorrectOption === optIdx;
+                          {shuffledInfo.options.map((opt, optIdx) => {
+                            const originalIdx = shuffledInfo.shuffledToOriginal[optIdx];
+                            const isThisTarget = activeChosenOriginal === originalIdx;
+                            const isCorrectAnswerIdx = currentQ.correctOption === originalIdx;
 
                             let optStyle = "border-slate-200 text-slate-700 hover:border-blue-400 hover:bg-slate-50/50";
                             let iconBadge = <span className="text-[11px] font-black">{alphabets[optIdx]}</span>;
@@ -2296,6 +3385,10 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                               } else {
                                 optStyle = "border-slate-200/50 text-slate-400 bg-slate-50/25 cursor-not-allowed";
                               }
+                            } else if (isThisTarget) {
+                              // Styling when selected in exam simulation mode (non-resolved)
+                              optStyle = "border-indigo-600 bg-indigo-50 text-indigo-950 font-extrabold shadow-sm ring-2 ring-indigo-500/20";
+                              iconBadge = <span className="text-[11px] font-black text-indigo-700">{alphabets[optIdx]}</span>;
                             }
 
                             return (
@@ -2303,12 +3396,13 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                                 key={optIdx}
                                 type="button"
                                 disabled={hasResolved}
-                                onClick={() => handleAnswerQuestion(currentQ, optIdx)}
+                                onClick={() => handleAnswerQuestion(currentQ, originalIdx)}
                                 className={`p-4.5 rounded-2xl border text-left text-xs font-bold leading-relaxed transition-all duration-150 flex items-center gap-3.5 cursor-pointer ${optStyle}`}
                               >
                                 <span className={`w-8 h-8 rounded-full border flex items-center justify-center shrink-0 ${
                                   hasResolved && isCorrectAnswerIdx ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm shadow-emerald-500/10' :
                                   hasResolved && isThisTarget ? 'bg-red-500 text-white border-red-500 shadow-sm shadow-red-500/10' :
+                                  (!hasResolved && isThisTarget) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-500/10' :
                                   'bg-slate-50 border-slate-300 text-slate-500'
                                 }`}>
                                   {iconBadge}
@@ -2332,13 +3426,13 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                         )}
 
                         {/* Explanation block dynamic expansion */}
-                        {(showExplanation || alreadyAnsweredItem) && (
+                        {showInstantFeedback && (showExplanation || alreadyAnsweredItem) && (
                           <DetailedExplanationBox question={currentQ} />
                         )}
                       </div>
 
                       {/* Bottom navigation control block */}
-                      <div className="pt-5 border-t border-slate-100 flex justify-between select-none shrink-0 gap-4">
+                      <div className="pt-5 border-t border-slate-100 flex flex-wrap justify-between items-center select-none shrink-0 gap-3">
                         <button
                           disabled={practiceIndex === 0}
                           onClick={() => {
@@ -2349,6 +3443,54 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                           className="px-4.5 py-2.5 rounded-2xl border border-slate-250 text-xs font-bold text-slate-600 hover:bg-slate-50 active:scale-95 transition flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                         >
                           <ChevronLeft className="w-4 h-4" /> Câu trước
+                        </button>
+
+                        {/* CENTRED INTEGRATIVE NỘP BÀI BUTTON FOR PRACTICE */}
+                        <button
+                          onClick={() => {
+                            const answeredCount = practiceExamMode 
+                              ? filteredPracticeQuestions.filter(q => practiceTempAnswers[q.id] !== undefined).length
+                              : filteredPracticeQuestions.filter(q => answeredHistory[q.id] !== undefined).length;
+                            
+                            if (answeredCount === 0) {
+                              customAlert("Bạn chưa trả lời câu hỏi nào trong chuyên đề này cả! Hãy rèn luyện một vài câu trước khi nộp để có số liệu xếp hạng nhé.", "Nhắc nhở");
+                              return;
+                            }
+                            
+                            customConfirm("Bạn có thực sự muốn nộp bài ôn tập chuyên đề lúc này để xem thống kê xếp hạng?", () => {
+                              if (practiceExamMode) {
+                                // Merge exam temporary answers into the persistent score list
+                                const updatedHistory = { ...answeredHistory };
+                                let newlyCorrectCount = 0;
+                                filteredPracticeQuestions.forEach(q => {
+                                  const chosen = practiceTempAnswers[q.id];
+                                  if (chosen !== undefined) {
+                                    const isCorrect = chosen === q.correctOption;
+                                    updatedHistory[q.id] = { correct: isCorrect, chosenOption: chosen };
+                                    if (isCorrect) {
+                                      newlyCorrectCount++;
+                                    }
+                                  }
+                                });
+                                setAnsweredHistory(updatedHistory);
+                                localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(updatedHistory));
+
+                                if (newlyCorrectCount > 0) {
+                                  registerStudyActivity();
+                                  setTodayPracticedCount(prev => {
+                                    const next = prev + newlyCorrectCount;
+                                    localStorage.setItem("vnu1001_today_practiced_v1", next.toString());
+                                    return next;
+                                  });
+                                }
+                              }
+                              setShowPracticeResult(true);
+                            }, "Nộp bài ôn tập");
+                          }}
+                          className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:shadow-emerald-600/15 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black active:scale-95 transition flex items-center gap-1.5 cursor-pointer shadow border-b border-emerald-750"
+                        >
+                          <CheckCircle2 className="w-4 h-4 text-white shrink-0" />
+                          Nộp Bài Ôn Tập
                         </button>
 
                         <button
@@ -2363,7 +3505,7 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                           Câu tiếp theo <ChevronRight className="w-4 h-4" />
                         </button>
                       </div>
-                    </>
+                    </div>
                   );
                 })()}
 
@@ -2383,9 +3525,25 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
               {/* Exam Info Card Header strip with timer */}
               <div className="bg-slate-900 text-white p-6 rounded-3xl flex flex-col md:flex-row justify-between items-center gap-4 shadow-xl border border-slate-800 shrink-0">
                 <div className="space-y-1.5 text-center md:text-left">
-                  <span className="text-[10px] bg-blue-600 font-extrabold px-3 py-1 rounded-md tracking-wider uppercase">{fullDatabase === getFullVNU1001Database() ? "VNU1001" : "ĐỀ TỰ CHỌN"} Mock Exam</span>
-                  <h3 className="font-black text-lg">Đề Khảo Sát Tổng Hợp Toàn Bộ Khối Kiến Thức Số</h3>
-                  <p className="text-xs text-slate-300 font-medium">Đề thi gồm {mockQuestions.length} câu hỏi. Đạt từ 50% câu trả lời đúng trở lên để nhận chứng nhận vượt ải.</p>
+                  {(() => {
+                    const officialExam = ALL_PLDC_EXAMS.find(e => e.id === currentOfficialExamId);
+                    if (officialExam) {
+                      return (
+                        <>
+                          <span className="text-[10px] bg-emerald-600 font-extrabold px-3 py-1 rounded-md tracking-wider uppercase">Đề Thi Pháp Luật Đại Cương Bản Pro</span>
+                          <h3 className="font-black text-lg">{officialExam.title}</h3>
+                          <p className="text-xs text-slate-300 font-medium">{officialExam.description}</p>
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        <span className="text-[10px] bg-blue-600 font-extrabold px-3 py-1 rounded-md tracking-wider uppercase">{currentSubject === 'vnu1001' ? "VNU1001" : currentSubject === 'pldc' ? "PLDC" : "MLDG"} Mock Exam</span>
+                        <h3 className="font-black text-lg">Đề Khảo Sát Tổng Hợp Ngẫu Nhiên</h3>
+                        <p className="text-xs text-slate-300 font-medium">Đề thi gồm {mockQuestions.length} câu hỏi ngẫu nhiên. Đạt từ 50% câu trả lời đúng trở lên để nhận chứng nhận vượt ải.</p>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div className="flex items-center gap-3 py-2.5 px-5 bg-slate-800 border border-slate-700/50 rounded-2xl shrink-0">
@@ -2409,33 +3567,37 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                       </h4>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                        {q.options.map((opt, optIdx) => {
-                          const isSelected = mockAnswers[q.id] === optIdx;
-                          return (
-                            <button
-                              key={optIdx}
-                              type="button"
-                              onClick={() => {
-                                setMockAnswers({
-                                  ...mockAnswers,
-                                  [q.id]: optIdx
-                                });
-                              }}
-                              className={`p-3.5 rounded-2xl border text-left font-bold transition flex items-center gap-2.5 cursor-pointer ${
-                                isSelected 
-                                  ? 'bg-blue-50 border-blue-500 text-blue-900 shadow-sm' 
-                                  : 'border-slate-200 text-slate-650 hover:border-blue-300 hover:bg-slate-50/10'
-                              }`}
-                            >
-                              <span className={`inline-block w-6.5 h-6.5 rounded-full border text-center leading-6 shrink-0 text-xs font-black ${
-                                isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 border-slate-300 text-slate-500'
-                              }`}>
-                                {String.fromCharCode(65 + optIdx)}
-                              </span>
-                              <span>{opt}</span>
-                            </button>
-                          );
-                        })}
+                        {(() => {
+                          const shuffledInfo = getShuffledOptions(q, shuffleOptions);
+                          return shuffledInfo.options.map((opt, optIdx) => {
+                            const originalIdx = shuffledInfo.shuffledToOriginal[optIdx];
+                            const isSelected = mockAnswers[q.id] === originalIdx;
+                            return (
+                              <button
+                                key={optIdx}
+                                type="button"
+                                onClick={() => {
+                                  setMockAnswers({
+                                    ...mockAnswers,
+                                    [q.id]: originalIdx
+                                  });
+                                }}
+                                className={`p-3.5 rounded-2xl border text-left font-bold transition flex items-center gap-2.5 cursor-pointer ${
+                                  isSelected 
+                                    ? 'bg-blue-50 border-blue-500 text-blue-900 shadow-sm' 
+                                    : 'border-slate-200 text-slate-650 hover:border-blue-300 hover:bg-slate-50/10'
+                                }`}
+                              >
+                                <span className={`inline-block w-6.5 h-6.5 rounded-full border text-center leading-6 shrink-0 text-xs font-black ${
+                                  isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 border-slate-300 text-slate-500'
+                                }`}>
+                                  {String.fromCharCode(65 + optIdx)}
+                                </span>
+                                <span>{opt}</span>
+                              </button>
+                            );
+                          });
+                        })()}
                       </div>
                     </div>
                   ))}
@@ -2511,83 +3673,193 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
-              className="max-w-3xl mx-auto space-y-8"
+              className="max-w-6xl mx-auto space-y-8"
             >
-              {/* Visual splash score */}
-              <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xl text-center">
-                <div className={`p-8 text-white flex flex-col items-center justify-center space-y-3 ${
-                  examSavedResult.passed ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-red-500 to-rose-600'
-                }`}>
-                  <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center border border-white/20 shadow-inner">
-                    <Award className="w-9 h-9 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black">
-                      {examSavedResult.passed ? 'CHÚC MỪNG: BẠN ĐÃ ĐẠT CHỨNG CHỈ!' : 'TIẾC QUÁ: ĐIỂM CHƯA ĐẠT CHUẨN!'}
-                    </h3>
-                    <p className="text-xs text-white/80 font-bold">Hãy xem kỹ các lỗi sai đỏ và tiếp tục nỗ lực ôn tập chuyên đề nhé</p>
-                  </div>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                {/* LEFT COLUMN: VISUAL CERTIFICATE AND CONTROLS */}
+                <div className="lg:col-span-6 space-y-6">
+                  {/* Visual splash score */}
+                  <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xl text-center">
+                    <div className={`p-8 text-white flex flex-col items-center justify-center space-y-3 ${
+                      examSavedResult.passed ? 'bg-gradient-to-br from-indigo-600 to-blue-600' : 'bg-gradient-to-br from-rose-500 to-red-600'
+                    }`}>
+                      <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center border border-white/20 shadow-inner">
+                        <Award className="w-9 h-9 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-black">
+                          {examSavedResult.passed ? 'CHÚC MỪNG: BẠN ĐÃ ĐẠT CHỨNG CHỈ!' : 'TIẾC QUÁ: ĐIỂM CHƯA ĐẠT CHUẨN!'}
+                        </h3>
+                        <p className="text-xs text-white/80 font-bold">Hãy xem kỹ các lỗi sai đỏ và tiếp tục nỗ lực ôn tập chuyên đề nhé</p>
+                      </div>
 
-                  <div className="bg-white/10 border border-white/20 p-4.5 rounded-2xl px-8 select-none">
-                    <span className="text-[10px] text-white/50 block font-black uppercase tracking-wider">Điểm số thu được</span>
-                    <span className="text-4xl font-extrabold">{examSavedResult.score.toFixed(1)} / 10đ</span>
+                      <div className="bg-white/10 border border-white/20 p-4.5 rounded-2xl px-8 select-none">
+                        <span className="text-[10px] text-white/50 block font-black uppercase tracking-wider">Điểm số thu được</span>
+                        <span className="text-4xl font-extrabold">{examSavedResult.score.toFixed(1)} / 10đ</span>
+                      </div>
+                    </div>
+
+                    {/* Score details breakdown dashboard */}
+                    <div className="p-6 grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50 border-b border-slate-105">
+                      <div className="text-center space-y-1">
+                        <span className="text-[9px] text-slate-400 font-extrabold uppercase block tracking-wider">Số câu Đúng</span>
+                        <span className="text-sm font-black text-emerald-600">{examSavedResult.correctCount} câu</span>
+                      </div>
+                      <div className="text-center space-y-1">
+                        <span className="text-[9px] text-slate-400 font-extrabold uppercase block tracking-wider">Số câu Sai</span>
+                        <span className="text-sm font-black text-red-500">{examSavedResult.wrongCount} câu</span>
+                      </div>
+                      <div className="text-center space-y-1">
+                        <span className="text-[9px] text-slate-400 font-extrabold uppercase block tracking-wider">Thời gian làm bài</span>
+                        <span className="text-xs font-bold font-mono text-slate-800 leading-none h-6 block py-1">{examSavedResult.timeSpent}</span>
+                      </div>
+                      <div className="text-center space-y-1">
+                        <span className="text-[9px] text-slate-400 font-extrabold uppercase block tracking-wider">Chứng nhận</span>
+                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md inline-block ${
+                          examSavedResult.passed ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                        }`}>{examSavedResult.passed ? "ĐÃ ĐẠT" : "CHƯA ĐẠT"}</span>
+                      </div>
+                    </div>
+
+                    <div className="p-6 bg-white border-t border-slate-100 space-y-4">
+                      <div className="text-[11px] text-slate-500 font-bold uppercase tracking-wider text-center select-none">
+                         Lựa chọn ôn tập & khắc phục lỗ hổng kiến thức
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          onClick={handleRetakeAll}
+                          className="bg-slate-900 hover:bg-slate-950 text-white text-xs font-black py-3 px-1.5 rounded-2xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" /> Làm lại toàn bộ đề
+                        </button>
+                        
+                        <button
+                          onClick={handleRetakeWrong}
+                          className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-black py-3 px-1.5 rounded-2xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+                        >
+                          <AlertCircle className="w-3.5 h-3.5" /> Chỉ làm lại câu SAI
+                        </button>
+
+                        <button
+                          onClick={handleStartMockExam}
+                          className="bg-indigo-600 hover:bg-indigo-750 text-white text-xs font-black py-3 px-1.5 rounded-2xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-white animate-pulse" /> Đề ngẫu nhiên mới
+                        </button>
+
+                        <button
+                          onClick={() => setActiveTab('dashboard')}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black py-3 px-1.5 rounded-2xl transition cursor-pointer border border-slate-350/50"
+                        >
+                          Quay về tổng quan
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Score details breakdown dashboard */}
-                <div className="p-8 grid grid-cols-2 sm:grid-cols-4 gap-6 bg-slate-50 border-b border-slate-105">
-                  <div className="text-center space-y-1">
-                    <span className="text-[9px] text-slate-400 font-extrabold uppercase block tracking-wider">Số câu Đúng</span>
-                    <span className="text-lg font-black text-emerald-600">{examSavedResult.correctCount} câu</span>
+                {/* RIGHT COLUMN: INTERACTIVE AZOTA LEADERBOARD PANEL */}
+                <div className="lg:col-span-6 bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden flex flex-col h-[490px]">
+                  {/* Azota branded header */}
+                  <div className="bg-gradient-to-r from-teal-650 via-blue-700 to-indigo-850 p-5 text-white flex flex-col">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <Trophy className="w-5 h-5 text-yellow-350 fill-yellow-350 animate-bounce" />
+                        <span className="font-black text-sm uppercase tracking-wide">Bảng điểm thi đua Azota</span>
+                      </div>
+                      <span className="text-[9px] bg-red-600 text-white shrink-0 uppercase tracking-widest font-black px-2 py-0.5 rounded-full animate-pulse flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white block"></span> Trực tuyến
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-teal-50/80 font-bold mt-1.5">Mô phỏng thi đua tương tác trực tiếp với các học viên khác tại hệ thống Azota VNU</p>
                   </div>
-                  <div className="text-center space-y-1">
-                    <span className="text-[9px] text-slate-400 font-extrabold uppercase block tracking-wider">Số câu Sai</span>
-                    <span className="text-lg font-black text-red-500">{examSavedResult.wrongCount} câu</span>
-                  </div>
-                  <div className="text-center space-y-1">
-                    <span className="text-[9px] text-slate-400 font-extrabold uppercase block tracking-wider">Thời gian đi qua</span>
-                    <span className="text-xs font-bold font-mono text-slate-800 leading-none h-6 block py-1">{examSavedResult.timeSpent}</span>
-                  </div>
-                  <div className="text-center space-y-1">
-                    <span className="text-[9px] text-slate-400 font-extrabold uppercase block tracking-wider">Chứng nhận</span>
-                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md inline-block ${
-                      examSavedResult.passed ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                    }`}>{examSavedResult.passed ? "ĐÃ ĐẠT" : "CHƯA ĐẠT"}</span>
-                  </div>
-                </div>
 
-                <div className="p-6 bg-white border-t border-slate-100 space-y-4">
-                  <div className="text-[11px] text-slate-500 font-bold uppercase tracking-wider text-center select-none">
-                     Lựa chọn ôn tập & khắc phục lỗ hổng kiến thức
+                  {/* Leaderboard search searcher */}
+                  <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-105 flex items-center justify-between gap-3 text-xs">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        placeholder="Tìm thủ khoa hoặc tên đối thủ..."
+                        value={leaderboardSearchQuery}
+                        onChange={(e) => setLeaderboardSearchQuery(e.target.value)}
+                        className="w-full text-[11px] font-semibold pl-8 pr-3 py-2 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-800"
+                      />
+                      <Users className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-extrabold shrink-0 bg-slate-200/50 px-2 py-1 rounded-lg">
+                      {examLeaderboard.length} thí sinh
+                    </span>
                   </div>
-                  <div className="flex flex-col sm:flex-row justify-center items-center gap-3">
-                    <button
-                      onClick={handleRetakeAll}
-                      className="w-full sm:w-auto bg-slate-900 hover:bg-slate-950 text-white text-xs font-black py-3 px-5 rounded-2xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" /> Làm lại toàn bộ đề này
-                    </button>
-                    
-                    <button
-                      onClick={handleRetakeWrong}
-                      className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-white text-xs font-black py-3 px-5 rounded-2xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
-                    >
-                      <AlertCircle className="w-3.5 h-3.5" /> Chỉ làm lại câu đã SAI
-                    </button>
 
-                    <button
-                      onClick={handleStartMockExam}
-                      className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white text-xs font-black py-3 px-5 rounded-2xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-white" /> Thi đề ngẫu nhiên mới
-                    </button>
+                  {/* Competitor scroll zone */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-2.5 scrollbar-thin">
+                    {(() => {
+                      const filtered = examLeaderboard.filter(c => 
+                        c.name.toLowerCase().includes(leaderboardSearchQuery.toLowerCase())
+                      );
 
-                    <button
-                      onClick={() => setActiveTab('dashboard')}
-                      className="w-full sm:w-auto bg-slate-150 hover:bg-slate-200 text-slate-700 text-xs font-extrabold py-3 px-5 rounded-2xl transition cursor-pointer border border-slate-300/30"
-                    >
-                      Về bảng tổng quan
-                    </button>
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="py-14 text-center text-xs text-slate-405 font-bold">
+                            Không có kết quả nào khớp với tìm kiếm...
+                          </div>
+                        );
+                      }
+
+                      return filtered.map((item) => {
+                        const isUser = !item.isVirtual;
+                        const isPodium = item.rank <= 3;
+                        const initials = item.name.split(" ").slice(-2).map((n: string) => n[0]).join("");
+
+                        let rankTag = <span className="text-xs font-bold text-slate-450 font-mono w-6 text-center shrink-0">#{item.rank}</span>;
+                        if (item.rank === 1) rankTag = <span className="text-xs bg-yellow-405 text-amber-950 font-black px-1.5 py-0.5 rounded shadow shrink-0">🥇 1</span>;
+                        if (item.rank === 2) rankTag = <span className="text-xs bg-slate-250 text-slate-850 font-black px-1.5 py-0.5 rounded shadow shrink-0">🥈 2</span>;
+                        if (item.rank === 3) rankTag = <span className="text-xs bg-amber-600 text-white font-black px-1.5 py-0.5 rounded shadow shrink-0">🥉 3</span>;
+
+                        return (
+                          <div
+                            key={item.name}
+                            className={`p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all duration-150 ${
+                              isUser 
+                                ? "bg-indigo-50/70 border-indigo-400 shadow shadow-indigo-650/15 ring-1 ring-indigo-500/20"
+                                : isPodium
+                                  ? "bg-amber-50/20 border-amber-250/50"
+                                  : "bg-white border-slate-105 hover:border-slate-200"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div>{rankTag}</div>
+                              
+                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-[10px] shrink-0 font-mono ${item.avatarBg}`}>
+                                {initials}
+                              </div>
+
+                              <div className="min-w-0">
+                                <h4 className={`text-xs truncate text-slate-900 flex items-center gap-1.5 ${isUser ? 'font-black text-indigo-950' : 'font-extrabold'}`}>
+                                  {item.name}
+                                  {isUser && (
+                                    <span className="text-[8px] bg-indigo-600 text-white font-black px-1.5 py-0.5 rounded tracking-wide shrink-0 animate-pulse">
+                                      BẠN
+                                    </span>
+                                  )}
+                                </h4>
+                                <p className="text-[10px] text-slate-450 font-semibold truncate leading-none mt-1">{item.className}</p>
+                              </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <span className={`text-xs font-black block leading-none ${isUser ? 'text-indigo-600' : 'text-slate-800'}`}>
+                                {item.score.toFixed(1)} <span className="text-[8.5px] text-slate-400 font-bold">đ</span>
+                              </span>
+                              <span className="text-[9px] text-slate-400 font-mono font-bold block pt-1.5">
+                                {item.correctCount}/{item.totalCount}Đ • {item.timeSpentStr.replace(" phút", "p").replace(" giây", "s")}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
               </div>
@@ -2654,27 +3926,33 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                           </div>
 
                           {/* Answers breakdown */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                            {q.options.map((opt, oindex) => {
-                              let itemBorder = "border-slate-100";
-                              let iconMark = <span className="text-[10px] pr-1.5 text-slate-400">{String.fromCharCode(65 + oindex)}.</span>;
+                          {(() => {
+                            const shuffledInfo = getShuffledOptions(q, shuffleOptions);
+                            return (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                {shuffledInfo.options.map((opt, optIdx) => {
+                                  const originalIdx = shuffledInfo.shuffledToOriginal[optIdx];
+                                  let itemBorder = "border-slate-100";
+                                  let iconMark = <span className="text-[10px] pr-1.5 text-slate-400">{String.fromCharCode(65 + optIdx)}.</span>;
 
-                              if (oindex === correctIdx) {
-                                itemBorder = "border-emerald-250 bg-emerald-50/50 text-emerald-900 font-extrabold";
-                                iconMark = <Check className="w-3.5 h-3.5 text-emerald-600 mr-1" />;
-                              } else if (oindex === chosen) {
-                                itemBorder = "border-red-250 bg-red-50/50 text-red-900 font-extrabold";
-                                iconMark = <X className="w-3.5 h-3.5 text-red-650 mr-1" />;
-                              }
+                                  if (originalIdx === correctIdx) {
+                                    itemBorder = "border-emerald-250 bg-emerald-50/50 text-emerald-950 font-extrabold";
+                                    iconMark = <Check className="w-3.5 h-3.5 text-emerald-600 mr-1" />;
+                                  } else if (originalIdx === chosen) {
+                                    itemBorder = "border-red-250 bg-red-50/50 text-red-950 font-extrabold";
+                                    iconMark = <X className="w-3.5 h-3.5 text-red-650 mr-1" />;
+                                  }
 
-                              return (
-                                <div key={oindex} className={`p-2.5 border rounded-xl flex items-center text-[11px] font-medium leading-normal ${itemBorder}`}>
-                                  {iconMark}
-                                  <span>{opt}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
+                                  return (
+                                    <div key={optIdx} className={`p-2.5 border rounded-xl flex items-center text-[11px] font-medium leading-normal ${itemBorder}`}>
+                                      {iconMark}
+                                      <span>{opt}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
 
                           <DetailedExplanationBox question={q} />
                         </div>
@@ -2737,21 +4015,28 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
 
                         {/* Options */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs pt-2">
-                          {q.options.map((opt, oindex) => (
-                            <div 
-                              key={oindex} 
-                              className={`p-3.5 border rounded-2xl flex items-center gap-2 font-bold ${
-                                oindex === corrIdx ? 'border-emerald-250 bg-emerald-50/30 text-emerald-950' : 'border-slate-100 text-slate-600'
-                              }`}
-                            >
-                              <span className={`w-6 h-6 rounded-full border text-center leading-5 shrink-0 text-xs ${
-                                oindex === corrIdx ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-slate-50 border-slate-300 text-slate-500'
-                              }`}>
-                                {String.fromCharCode(65 + oindex)}
-                              </span>
-                              <span>{opt}</span>
-                            </div>
-                          ))}
+                          {(() => {
+                            const shuffledInfo = getShuffledOptions(q, shuffleOptions);
+                            return shuffledInfo.options.map((opt, optIdx) => {
+                              const originalIdx = shuffledInfo.shuffledToOriginal[optIdx];
+                              const isCorrect = originalIdx === corrIdx;
+                              return (
+                                <div 
+                                  key={optIdx} 
+                                  className={`p-3.5 border rounded-2xl flex items-center gap-2 font-bold ${
+                                    isCorrect ? 'border-emerald-250 bg-emerald-50/30 text-emerald-950' : 'border-slate-100 text-slate-600'
+                                  }`}
+                                >
+                                  <span className={`w-6 h-6 rounded-full border text-center leading-5 shrink-0 text-xs ${
+                                    isCorrect ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-slate-50 border-slate-300 text-slate-500'
+                                  }`}>
+                                    {String.fromCharCode(65 + optIdx)}
+                                  </span>
+                                  <span>{opt}</span>
+                                </div>
+                              );
+                            });
+                          })()}
                         </div>
 
                         <DetailedExplanationBox question={q} />
@@ -2790,7 +4075,7 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                     onClick={handleResetToDefault}
                     className="w-full md:w-auto flex items-center justify-center gap-1.5 bg-red-650 hover:bg-red-700 text-white text-xs font-black py-3 px-5 rounded-2xl transition cursor-pointer shrink-0 shadow-lg"
                   >
-                    <RotateCcw className="w-3.5 h-3.5" /> Khôi Phục Đề Chuẩn {currentSubject === 'vnu1001' ? "VNU1001" : "Pháp Luật ĐC"}
+                    <RotateCcw className="w-3.5 h-3.5" /> Khôi Phục Đề Chuẩn {currentSubject === 'vnu1001' ? "VNU1001" : currentSubject === 'pldc' ? "Pháp Luật ĐC" : "Đo Lường ĐG"}
                   </button>
                 )}
               </div>
@@ -3110,7 +4395,7 @@ Giải thích: RAM (Random Access Memory) là bộ nhớ dữ liệu tạm để
                         onClick={() => handleSaveImportedQuestions(false)}
                         className="w-full sm:w-auto flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs py-3 px-6 rounded-2xl transition cursor-pointer select-none shadow-md shadow-blue-500/10"
                       >
-                        <Plus className="w-4 h-4 animate-pulse" /> Trộn Cùng Đề Chuẩn {currentSubject === 'vnu1001' ? "VNU1001" : "Pháp Luật ĐC"}
+                        <Plus className="w-4 h-4 animate-pulse" /> Trộn Cùng Đề Chuẩn {currentSubject === 'vnu1001' ? "VNU1001" : currentSubject === 'pldc' ? "Pháp Luật ĐC" : "Đo Lường ĐG"}
                       </button>
 
                       <button
@@ -3242,12 +4527,16 @@ Giải thích: RAM (Random Access Memory) là bộ nhớ dữ liệu tạm để
 
                   <div className="py-1">
                     <span className="text-base font-black text-slate-900 border-b border-dashed border-slate-400 pb-0.5 px-4 inline-block">
-                      {certFullName || "Học viên VNU1001"}
+                      {certFullName || (currentSubject === 'vnu1001' ? "Học viên VNU1001" : currentSubject === 'pldc' ? "Học viên Pháp Luật" : currentSubject === 'mldg' ? "Học viên Đo Lường GD" : "Học viên Tâm Lý Học")}
                     </span>
                   </div>
 
                   <p className="text-[9px] font-bold text-slate-650 max-w-sm mx-auto leading-normal m-0 animate-pulse">
-                    Đã xuất sắc hoàn thành lộ trình trắc nghiệm khảo thí gồm 6 chuyên đề cốt lõi với điểm số vượt bậc.
+                    {currentSubject === 'mldg' 
+                      ? "Đã xuất sắc hoàn thành lộ trình trắc nghiệm khảo thí gồm 4 chuyên đề cốt lõi với điểm số vượt bậc."
+                      : currentSubject === 'tlhgd'
+                        ? "Đã xuất sắc hoàn thành lộ trình trắc nghiệm khảo thí gồm 6 chuyên đề tâm lý giáo dục cốt lõi với điểm số vượt bậc."
+                        : "Đã xuất sắc hoàn thành lộ trình trắc nghiệm khảo thí gồm 6 chuyên đề cốt lõi với điểm số vượt bậc."}
                   </p>
                 </div>
 
@@ -3360,7 +4649,7 @@ Giải thích: RAM (Random Access Memory) là bộ nhớ dữ liệu tạm để
 
           <div className="text-center space-y-1 mt-4">
             <h5 className="text-[9px] font-black uppercase tracking-widest text-slate-500 m-0 font-sans">HỆ THỐNG THI THỬ & KHẢO THÍ HỌC THUẬT TIÊU CHUẨN</h5>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight m-0 font-sans">{currentSubject === 'vnu1001' ? "CỔNG LUYỆN THI TRẮC NGHIỆM TIÊU CHUẨN VNU1001" : "CỔNG LUYỆN THI PHÁP LUẬT ĐẠI CƯƠNG PRO"}</h2>
+            <h2 className="text-xl font-black text-slate-900 tracking-tight m-0 font-sans">{currentSubject === 'vnu1001' ? "CỔNG LUYỆN THI TRẮC NGHIỆM TIÊU CHUẨN VNU1001" : currentSubject === 'pldc' ? "CỔNG LUYỆN THI PHÁP LUẬT ĐẠI CƯƠNG PRO" : currentSubject === 'mldg' ? "CỔNG LUYỆN THI ĐO LƯỜNG ĐÁNH GIÁ TRONG GIÁO DỤC" : "CỔNG LUYỆN THI TÂM LÝ HỌC TRONG GIÁO DỤC"}</h2>
           </div>
 
           {/* Core Certificate Body */}
@@ -3375,12 +4664,12 @@ Giải thích: RAM (Random Access Memory) là bộ nhớ dữ liệu tạm để
             </div>
 
             <p className="text-[11px] font-medium italic text-slate-600 max-w-lg mx-auto leading-relaxed my-0">
-              Ban quản lý chương trình bồi dưỡng và kiểm tra kiến thức {currentSubject === 'vnu1001' ? "Kỹ năng số VNU1001" : "Pháp luật đại cương"} chứng nhận:
+              Ban quản lý chương trình bồi dưỡng và kiểm tra kiến thức {currentSubject === 'vnu1001' ? "Kỹ năng số VNU1001" : currentSubject === 'pldc' ? "Pháp luật đại cương" : currentSubject === 'mldg' ? "Nhập môn đo lường đánh giá trong giáo dục" : "Tâm lý học trong giáo dục"} chứng nhận:
             </p>
 
             <div className="space-y-1 py-1">
               <span className="text-xl font-black text-slate-900 font-sans border-b-2 border-dashed border-slate-400 px-8 pb-1 inline-block">
-                {certFullName || `Học viên ${currentSubject === 'vnu1001' ? "VNU1001" : "Pháp Luật"}`}
+                {certFullName || `Học viên ${currentSubject === 'vnu1001' ? "VNU1001" : currentSubject === 'pldc' ? "Pháp Luật" : currentSubject === 'mldg' ? "Đo Lường Giáo Dục" : "Tâm Lý Học"}`}
               </span>
               <span className="text-[9px] text-slate-400 tracking-widest uppercase block mt-1">Họ tên học viên / Candidate Name</span>
             </div>
@@ -3388,7 +4677,11 @@ Giải thích: RAM (Random Access Memory) là bộ nhớ dữ liệu tạm để
             <p className="text-[10px] font-semibold text-slate-705 max-w-md mx-auto leading-relaxed font-sans">
               {currentSubject === 'vnu1001' 
                 ? "Đã kết thúc lộ trình khảo thí trực tuyến gồm 6 học phần kỹ năng số, thực hành trả lời câu hỏi phân loại ngẫu nhiên bám sát Khung năng lực số chuẩn Đại học Quốc Gia."
-                : "Đã hoàn thành xuất sắc hệ thống 6 chuyên đề lý thuyết và giải thích loại trừ trực tiếp, nắm vững kiến thức căn bản về Nhà nước, Hệ thống pháp luật và các ngành luật ở Việt Nam."}
+                : currentSubject === 'pldc'
+                  ? "Đã hoàn thành xuất sắc hệ thống 6 chuyên đề lý thuyết và giải thích loại trừ trực tiếp, nắm vững kiến thức căn bản về Nhà nước, Hệ thống pháp luật và các ngành luật ở Việt Nam."
+                  : currentSubject === 'mldg'
+                    ? "Đã hoàn thành xuất sắc chương trình đo lường đánh giá giáo dục 4 chương lý thuyết thực nghiệm, chuẩn hóa tư duy thiết kế ma trận đề thi dốc khó và độ tin cậy Alpha nâng tầm chất lượng."
+                    : "Đã hoàn thành xuất sắc chương trình tâm lý học trong giáo dục gồm 12 chương lý thuyết hành vi, hoạt động dạy học, tham vấn học đường và nhân cách nhà giáo bồi đắp kỹ năng sâu sắc."}
             </p>
 
             {/* Micro Metrics Badges in certificate */}
@@ -3437,7 +4730,7 @@ Giải thích: RAM (Random Access Memory) là bộ nhớ dữ liệu tạm để
             <div className="flex justify-between items-center pb-4 border-b-2 border-slate-300">
               <div className="text-left space-y-0.5 font-sans">
                 <h3 className="text-sm font-black uppercase text-slate-900 m-0">HỌC BẠ ĐIỆN TỬ - CHI TIẾT TIẾN ĐỘ & HIỆU SUẤT KHẢO THÍ</h3>
-                <p className="text-[9px] text-slate-500 font-bold m-0">Detailed Academic Record & Skill Testing Profile - {currentSubject === 'vnu1001' ? 'VNU1001' : 'PLDC'}</p>
+                <p className="text-[9px] text-slate-500 font-bold m-0">Detailed Academic Record & Skill Testing Profile - {currentSubject === 'vnu1001' ? 'VNU1001' : currentSubject === 'pldc' ? 'PLDC' : currentSubject === 'mldg' ? 'MLDG' : 'TLHGD'}</p>
               </div>
               <div className="text-right text-[9px] text-slate-400 font-bold font-mono">
                 BÁO CÁO CHI TIẾT SỐ LƯU
@@ -3448,7 +4741,7 @@ Giải thích: RAM (Random Access Memory) là bộ nhớ dữ liệu tạm để
             <div className="grid grid-cols-2 gap-4 text-[11px] font-sans py-2 bg-slate-50 rounded-xl p-4 border border-slate-100">
               <div>
                 <span className="text-slate-400 font-bold block uppercase text-[8px] tracking-wide">Học viên ôn học:</span>
-                <span className="font-extrabold text-slate-800">{certFullName || `Học viên ${currentSubject === 'vnu1001' ? "VNU1001" : "Pháp Luật"}`}</span>
+                <span className="font-extrabold text-slate-800">{certFullName || `Học viên ${currentSubject === 'vnu1001' ? "VNU1001" : currentSubject === 'pldc' ? "Pháp Luật" : "Đo Lường Giáo Dục"}`}</span>
               </div>
               <div>
                 <span className="text-slate-400 font-bold block uppercase text-[8px] tracking-wide">Tài khoản xác thực liên kết:</span>
@@ -3603,6 +4896,48 @@ Giải thích: RAM (Random Access Memory) là bộ nhớ dữ liệu tạm để
           </div>
         )}
       </AnimatePresence>
+
+      {/* Dynamic Floating Streak Toasts / Reminders */}
+      <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 max-w-sm w-full pointer-events-none select-none">
+        <AnimatePresence>
+          {streakToasts.map((toast) => (
+            <motion.div
+              key={toast.id}
+              initial={{ opacity: 0, x: 50, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 50, scale: 0.92 }}
+              transition={{ type: "spring", damping: 15, stiffness: 120 }}
+              className={`p-4 rounded-2xl border pointer-events-auto flex items-start gap-3 shadow-xl backdrop-blur-md ${
+                toast.type === 'success' 
+                  ? 'bg-emerald-500/95 text-white border-emerald-400' 
+                  : toast.type === 'warning' 
+                    ? 'bg-amber-500/95 text-white border-amber-400' 
+                    : 'bg-slate-900/95 text-slate-100 border-slate-750'
+              }`}
+            >
+              {toast.type === 'success' ? (
+                <Flame className="w-5 h-5 text-yellow-300 fill-yellow-300 animate-bounce shrink-0 mt-0.5" />
+              ) : toast.type === 'warning' ? (
+                <AlertCircle className="w-5 h-5 text-white fill-amber-600/30 shrink-0 mt-0.5 animate-pulse" />
+              ) : (
+                <Sparkles className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1 space-y-0.5 leading-snug">
+                <span className="text-[10px] font-black uppercase tracking-wider block font-mono opacity-85">
+                  {toast.type === 'success' ? 'CỦNG CỐ STREAK' : toast.type === 'warning' ? 'CẢNH BÁO KỶ LUẬT' : 'HOẠT ĐỘNG STUDY'}
+                </span>
+                <p className="text-xs font-bold leading-normal">{toast.message}</p>
+              </div>
+              <button 
+                onClick={() => setStreakToasts(prev => prev.filter(t => t.id !== toast.id))}
+                className="text-white/65 hover:text-white transition cursor-pointer p-0.5 border-none bg-transparent"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
 
     </div>
   );
