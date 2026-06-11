@@ -30,6 +30,7 @@ import { getFullVNU1001Database as getFullVNU1001Database_IMPORT, VNU_TOPICS as 
 import { getFullPLDCDatabase, PLDC_TOPICS } from '../pldc_questions';
 import { getFullMLDGDatabase, MLDG_TOPICS } from '../mldg_questions';
 import { getFullTLHGDDatabase, TLHGD_TOPICS } from '../tlhgd_questions';
+import { getFullKHQLGDatabase, KHQLGD_TOPICS } from '../khqlgd_questions';
 import DetailedExplanationBox from './DetailedExplanationBox';
 import { PLDC_EXAMS_PART1, PLDCOfficialExam } from '../pldc_exams_part1';
 import { PLDC_EXAMS_PART2 } from '../pldc_exams_part2';
@@ -185,11 +186,11 @@ const STORAGE_THEME_KEY = "vnu1001_theme_v1";
 
 export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) {
   // --- SUBJECT STATE ---
-  const [currentSubject, setCurrentSubject] = useState<'vnu1001' | 'pldc' | 'mldg' | 'tlhgd'>(() => {
+  const [currentSubject, setCurrentSubject] = useState<'vnu1001' | 'pldc' | 'mldg' | 'tlhgd' | 'khqlgd'>(() => {
     try {
       const saved = localStorage.getItem("selected_subject_pldc_v1");
-      if (saved === 'pldc' || saved === 'vnu1001' || saved === 'mldg' || saved === 'tlhgd') {
-        return saved as 'vnu1001' | 'pldc' | 'mldg' | 'tlhgd';
+      if (saved === 'pldc' || saved === 'vnu1001' || saved === 'mldg' || saved === 'tlhgd' || saved === 'khqlgd') {
+        return saved as 'vnu1001' | 'pldc' | 'mldg' | 'tlhgd' | 'khqlgd';
       }
     } catch (e) {}
     return 'vnu1001';
@@ -200,7 +201,8 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
     if (currentSubject === 'vnu1001') return getFullVNU1001Database_IMPORT();
     if (currentSubject === 'pldc') return getFullPLDCDatabase();
     if (currentSubject === 'mldg') return getFullMLDGDatabase();
-    return getFullTLHGDDatabase();
+    if (currentSubject === 'tlhgd') return getFullTLHGDDatabase();
+    return getFullKHQLGDatabase();
   };
 
   const VNU_TOPICS = currentSubject === 'vnu1001' 
@@ -209,22 +211,25 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
       ? PLDC_TOPICS 
       : currentSubject === 'mldg'
         ? MLDG_TOPICS
-        : TLHGD_TOPICS;
+        : currentSubject === 'tlhgd'
+          ? TLHGD_TOPICS
+          : KHQLGD_TOPICS;
 
   // --- DYNAMIC DATABASE STATE ENGINE ---
   const [activeDatabase, setActiveDatabase] = useState<VNUQuestion[]>(() => {
     const savedSubject = (() => {
       try {
         const saved = localStorage.getItem("selected_subject_pldc_v1");
-        if (saved === 'pldc' || saved === 'vnu1001' || saved === 'mldg' || saved === 'tlhgd') return saved;
+        if (saved === 'pldc' || saved === 'vnu1001' || saved === 'mldg' || saved === 'tlhgd' || saved === 'khqlgd') return saved as 'vnu1001' | 'pldc' | 'mldg' | 'tlhgd' | 'khqlgd';
       } catch (e) {}
       return 'vnu1001';
     })();
 
-    const getMasterDbForSubject = (subj: 'vnu1001' | 'pldc' | 'mldg' | 'tlhgd'): VNUQuestion[] => {
+    const getMasterDbForSubject = (subj: 'vnu1001' | 'pldc' | 'mldg' | 'tlhgd' | 'khqlgd'): VNUQuestion[] => {
       if (subj === 'pldc') return getFullPLDCDatabase();
       if (subj === 'mldg') return getFullMLDGDatabase();
       if (subj === 'tlhgd') return getFullTLHGDDatabase();
+      if (subj === 'khqlgd') return getFullKHQLGDatabase();
       return getFullVNU1001Database_IMPORT();
     };
 
@@ -235,7 +240,9 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
           ? "mldg_custom_database_v1"
           : savedSubject === 'tlhgd'
             ? "tlhgd_custom_database_v1"
-            : "vnu1001_custom_database_v1";
+            : savedSubject === 'khqlgd'
+              ? "khqlgd_custom_database_v1"
+              : "vnu1001_custom_database_v1";
       const saved = localStorage.getItem(key);
       const masterList = getMasterDbForSubject(savedSubject);
       if (saved) {
@@ -267,6 +274,7 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
     if (savedSubject === 'pldc') return getFullPLDCDatabase();
     if (savedSubject === 'mldg') return getFullMLDGDatabase();
     if (savedSubject === 'tlhgd') return getFullTLHGDDatabase();
+    if (savedSubject === 'khqlgd') return getFullKHQLGDatabase();
     return getFullVNU1001Database_IMPORT();
   });
 
@@ -286,9 +294,14 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
   const [todayMockSubmitted, setTodayMockSubmitted] = useState<boolean>(false);
   const [reminderTime, setReminderTime] = useState<string>("20:00");
   const [reminderActive, setReminderActive] = useState<boolean>(true);
+  const [streakEnabled, setStreakEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem("vnu1001_streak_enabled_v1");
+    return saved !== "false";
+  });
   const [streakToasts, setStreakToasts] = useState<{ id: string; message: string; type: 'success' | 'warning' | 'info' }[]>([]);
 
   const addStreakToast = (message: string, type: 'success' | 'warning' | 'info' = 'success') => {
+    if (localStorage.getItem("vnu1001_streak_enabled_v1") === "false") return;
     const id = "toast_" + Date.now() + "_" + Math.random();
     setStreakToasts(prev => [...prev, { id, message, type }]);
     
@@ -440,7 +453,9 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
             ? "mldg_custom_database_v1"
             : currentSubject === 'tlhgd'
               ? "tlhgd_custom_database_v1"
-              : "vnu1001_custom_database_v1";
+              : currentSubject === 'khqlgd'
+                ? "khqlgd_custom_database_v1"
+                : "vnu1001_custom_database_v1";
         localStorage.setItem(key, JSON.stringify(updatedDb));
       } catch (e) {
         console.error(e);
@@ -469,14 +484,18 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
         ? "câu hỏi Pháp Luật Đại Cương chuẩn"
         : currentSubject === 'mldg'
           ? "câu hỏi Nhập môn đo lường đánh giá chuẩn"
-          : "câu hỏi Tâm lý học học đường chuẩn";
+          : currentSubject === 'tlhgd'
+            ? "câu hỏi Tâm lý học học đường chuẩn"
+            : "câu hỏi Khoa học quản lý trong giáo dục chuẩn";
     const key = currentSubject === 'pldc' 
       ? "pldc_custom_database_v1" 
       : currentSubject === 'mldg'
         ? "mldg_custom_database_v1"
         : currentSubject === 'tlhgd'
           ? "tlhgd_custom_database_v1"
-          : "vnu1001_custom_database_v1";
+          : currentSubject === 'khqlgd'
+            ? "khqlgd_custom_database_v1"
+            : "vnu1001_custom_database_v1";
     customConfirm(
       `Bạn có chắc chắn muốn khôi phục lại ngân hàng ${subjectPrefixName}? Toàn bộ các câu hỏi tự tạo hoặc tải lên của bạn sẽ bị xóa khỏi bộ nhớ.`,
       () => {
@@ -486,7 +505,9 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
             ? getFullPLDCDatabase()
             : currentSubject === 'mldg'
               ? getFullMLDGDatabase()
-              : getFullTLHGDDatabase();
+              : currentSubject === 'tlhgd'
+                ? getFullTLHGDDatabase()
+                : getFullKHQLGDatabase();
         setActiveDatabase(defaultDb);
         localStorage.removeItem(key);
         customAlert(`Đã khôi phục thành công ngân hàng ${subjectPrefixName}!`);
@@ -696,7 +717,7 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
   }, [selectedTopic, answeredHistory, fullDatabase]);
 
   // --- SWITCH SUBJECT UTILITY HANDLER ---
-  const handleSwitchSubject = (subject: 'vnu1001' | 'pldc' | 'mldg' | 'tlhgd') => {
+  const handleSwitchSubject = (subject: 'vnu1001' | 'pldc' | 'mldg' | 'tlhgd' | 'khqlgd') => {
     try {
       localStorage.setItem("selected_subject_pldc_v1", subject);
     } catch (e) {}
@@ -724,7 +745,9 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
           ? "mldg_custom_database_v1"
           : subject === 'tlhgd'
             ? "tlhgd_custom_database_v1"
-            : "vnu1001_custom_database_v1";
+            : subject === 'khqlgd'
+              ? "khqlgd_custom_database_v1"
+              : "vnu1001_custom_database_v1";
       const saved = localStorage.getItem(key);
       const masterList = subject === 'pldc'
         ? getFullPLDCDatabase()
@@ -732,7 +755,9 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
           ? getFullMLDGDatabase()
           : subject === 'tlhgd'
             ? getFullTLHGDDatabase()
-            : getFullVNU1001Database_IMPORT();
+            : subject === 'khqlgd'
+              ? getFullKHQLGDatabase()
+              : getFullVNU1001Database_IMPORT();
 
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -766,6 +791,8 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
       setActiveDatabase(getFullMLDGDatabase());
     } else if (subject === 'tlhgd') {
       setActiveDatabase(getFullTLHGDDatabase());
+    } else if (subject === 'khqlgd') {
+      setActiveDatabase(getFullKHQLGDatabase());
     } else {
       setActiveDatabase(getFullVNU1001Database_IMPORT());
     }
@@ -1609,6 +1636,13 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
         { id: 5, name: "CHƯƠNG 8 & 9: Tâm lý hoạt động học và dạy học", icon: ShieldAlert, accent: "from-rose-500 to-red-600", desc: "Động cơ học tập nội tại bên trong, lý thuyết Piaget phát triển trí tuệ, thuyết ZPD Vygotsky, phong cách dân chủ và độc đoán sư phạm giáo viên." },
         { id: 6, name: "CHƯƠNG 10-12: Môi trường, Đạo đức & Tham vấn học đường", icon: Flame, accent: "from-cyan-500 to-blue-600", desc: "Nhân cách nhà giáo đức tài, tham vấn gỡ rối bạo lực học đường trầm cảm, hỗ trợ trẻ hòa nhập tự kỷ, trí tuệ cảm xúc EQ & Growth Mindset." }
       ];
+    } else if (currentSubject === 'khqlgd') {
+      return [
+        { id: 1, name: "CHỦ ĐỀ 1: Đại cương về tổ chức & các trường phái quản lý", icon: BookOpen, accent: "from-blue-500 to-indigo-600", desc: "Căn cứ nhận biết tổ chức, tính tất yếu của quản lý, tư tưởng đức trị/pháp trị cổ đại, trường phái cổ điển Taylor/Fayol, định lượng và văn hóa quản trị Nhật Bản." },
+        { id: 2, name: "CHỦ ĐỀ 2: Lý thuyết và quy trình quản lý giáo dục", icon: Sparkles, accent: "from-amber-500 to-orange-600", desc: "Định vị quản lý cấp vĩ mô & vi mô, cấu trúc đa thành phần hệ thống giáo dục, mối quan hệ hữu cơ đổi mới sư phạm học đường." },
+        { id: 3, name: "CHỦ ĐỀ 3: Đưa quyết định và quản lý thông tin giáo dục", icon: CheckCircle2, accent: "from-emerald-500 to-teal-600", desc: "Vai trò trung tâm của quyết định, quy trình 5 bước ra quyết định khoa học, hệ thống xử lý thông tin 8 bước, tiêu chuẩn tin cậy thông tin." },
+        { id: 4, name: "CHỦ ĐỀ 4: Các mô hình quản lý & Đổi mới theo Nghị quyết 29", icon: Timer, accent: "from-purple-500 to-pink-600", desc: "So sánh 4 mô hình Tony Bush (chính thức, tập thể, chính trị, văn hóa), quyền tự chủ cơ sở giáo dục và tinh thần cốt lõi Nghị quyết 29." }
+      ];
     } else {
       return [
         { id: 1, name: "CHƯƠNG 1: Khái niệm & Lịch sử đo lường đánh giá", icon: BookOpen, accent: "from-blue-500 to-indigo-600", desc: "Các thuật ngữ đo lường, đánh giá, kiểm tra, lịch sử phát triển, học thuyết trắc nghiệm cổ điển và lý thuyết hiện đại." },
@@ -1626,7 +1660,7 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
       <header className="h-16 bg-slate-900 px-4 sm:px-8 flex items-center justify-between shrink-0 text-white shadow-md border-b border-slate-800 z-10 animate-fade-in print:hidden" id="vnu-header">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <div className="p-1 px-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-black text-xs sm:text-sm tracking-tight shadow-md shadow-blue-500/30 shrink-0">
-            {currentSubject === 'vnu1001' ? "VNU1001" : currentSubject === 'pldc' ? "PLDC" : currentSubject === 'mldg' ? "MLDG" : "TLHGD"}
+            {currentSubject === 'vnu1001' ? "VNU1001" : currentSubject === 'pldc' ? "PLDC" : currentSubject === 'mldg' ? "MLDG" : currentSubject === 'tlhgd' ? "TLHGD" : "KHQLGD"}
           </div>
           <div className="truncate hidden md:block">
             <h1 className="text-xs sm:text-sm font-black tracking-wide uppercase text-white leading-none truncate">
@@ -1636,7 +1670,9 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                   ? "Cổng Ôn Thi Pháp Luật Đại Cương" 
                   : currentSubject === 'mldg'
                     ? "Cổng Ôn Thi Nhập Môn Đo Lường Đánh Giá"
-                    : "Cổng Ôn Thi Tâm Lý Học Trong Giáo Dục"}
+                    : currentSubject === 'tlhgd'
+                      ? "Cổng Ôn Thi Tâm Lý Học Trong Giáo Dục"
+                      : "Cổng Ôn Thi Khoa Học Quản Lý Trong Giáo Dục"}
             </h1>
             <p className="text-[9px] sm:text-[10px] text-slate-400 font-bold truncate mt-1">
               {fullDatabase.length > 50 
@@ -1646,7 +1682,9 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                       ? "Giáo trình trắc nghiệm pháp luật tối ưu" 
                       : currentSubject === 'mldg'
                         ? "Giáo trình đo lường đánh giá giáo dục 400 câu chuẩn"
-                        : "Giáo trình tâm lý học trong giáo dục 250 câu chuẩn"}`
+                        : currentSubject === 'tlhgd'
+                          ? "Giáo trình tâm lý học trong giáo dục 250 câu chuẩn"
+                          : "Tài liệu ôn tập Khoa học quản lý trong giáo dục chuẩn"}`
                 : `Đang ôn luyện đề thi tự nạp của riêng bạn (${fullDatabase.length} câu)`}
             </p>
           </div>
@@ -1656,13 +1694,14 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
             <span className="hidden sm:inline pl-1 text-[9px] uppercase font-black tracking-wider text-slate-400">Phần học:</span>
             <select
               value={currentSubject}
-              onChange={(e) => handleSwitchSubject(e.target.value as 'vnu1050' | 'pldc' | 'mldg' | 'tlhgd' | any)}
+              onChange={(e) => handleSwitchSubject(e.target.value as 'vnu1050' | 'pldc' | 'mldg' | 'tlhgd' | 'khqlgd' | any)}
               className="bg-transparent text-slate-200 text-xs font-black py-1.5 px-1 outline-none cursor-pointer focus:ring-0 transition"
             >
               <option value="vnu1001" className="bg-slate-900 text-white font-bold">💻 Kỹ Năng Số (VNU1001)</option>
               <option value="pldc" className="bg-slate-900 text-white font-bold">⚖️ Pháp Luật Đại Cương</option>
               <option value="mldg" className="bg-slate-900 text-white font-bold">📊 Đo Lường Đánh Giá Giáo Dục</option>
               <option value="tlhgd" className="bg-slate-900 text-white font-bold">🧠 Tâm Lý Học Trong Giáo Dục</option>
+              <option value="khqlgd" className="bg-slate-900 text-white font-bold">🏫 Khoa Học Quản Lý Trong Giáo Dục</option>
             </select>
           </div>
         </div>
@@ -1713,10 +1752,37 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
             </div>
           </button>
 
-          <div className="flex items-center gap-1 text-xs bg-slate-800 border border-slate-700 px-2 sm:px-3 py-1.5 rounded-xl select-none" title="Chuỗi ngày học liên tục">
-            <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-500 fill-orange-500 animate-pulse" />
-            <span className="font-bold text-orange-400 text-[11px] sm:text-xs">Streak: {streakDays}d</span>
-          </div>
+          <button
+            onClick={() => {
+              customConfirm(
+                streakEnabled 
+                  ? "Bạn có chắc chắn muốn TẮT hệ thống theo dõi Streak và Nhiệm vụ hàng ngày không?" 
+                  : "Bạn có muốn BẬT lại hệ thống theo dõi Streak và Nhiệm vụ hàng ngày?",
+                () => {
+                  const nextVal = !streakEnabled;
+                  setStreakEnabled(nextVal);
+                  localStorage.setItem("vnu1001_streak_enabled_v1", nextVal.toString());
+                  if (nextVal) {
+                    addStreakToast("🔥 Đã kích hoạt lại hệ thống Streak!", "success");
+                  } else {
+                    customAlert("Hệ thống đã ẩn tất cả widget Streak và Nhiệm vụ hàng ngày để bạn tập trung ôn thi thoải mái nhất!");
+                  }
+                },
+                streakEnabled ? "Tạm tắt Streak" : "Bật lại Streak"
+              );
+            }}
+            className={`flex items-center gap-1.5 text-xs border px-2 sm:px-3 py-1.5 rounded-xl transition cursor-pointer select-none ring-1 active:translate-y-0.5 ${
+              streakEnabled 
+                ? "bg-amber-950/45 border-amber-500/50 text-orange-400 ring-amber-500/10 hover:bg-amber-900/40" 
+                : "bg-slate-800/80 border-slate-705 text-slate-400 ring-transparent hover:bg-slate-750"
+            }`}
+            title={streakEnabled ? "Streak đang Bật (Click để Tắt)" : "Streak đang Tắt (Click để Bật)"}
+          >
+            <Flame className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${streakEnabled ? "text-orange-500 fill-orange-500 animate-pulse animate-bounce" : "text-slate-450"}`} />
+            <span className="font-extrabold text-[11px] sm:text-xs">
+              {streakEnabled ? `Streak: ${streakDays}d` : "Streak: Off"}
+            </span>
+          </button>
 
           {activeTab !== 'dashboard' && (
             <button
@@ -1898,12 +1964,12 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                   <div className="bg-white p-5 rounded-2xl border border-slate-205 shadow-sm space-y-3">
                     <div className="flex justify-between items-start gap-4">
                       <div>
-                        <h4 className="text-[12px] font-black text-slate-800 uppercase tracking-tight">Tỷ Lệ Trả Lời Đúng Theo Chuyên Đề</h4>
-                        <p className="text-[10px] text-slate-400 font-bold block mt-0.5">Sự chuẩn xác tổng hợp giữa Luyện tập và Thi thử (%)</p>
+                        <h4 className="text-[12px] font-black text-slate-800 uppercase tracking-tight">Tỷ Lệ Học Tập Theo Phân Môn</h4>
+                        <p className="text-[10px] text-slate-400 font-bold block mt-0.5">Hiệu suất và độ chính xác chia theo 6 phân môn nền tảng</p>
                       </div>
-                      <span className="text-[9px] uppercase font-black px-2.5 py-1 rounded bg-indigo-50 text-indigo-700 whitespace-nowrap">6 Chuyên đề</span>
+                      <span className="text-[9px] uppercase font-black px-2.5 py-1 rounded bg-indigo-50 text-indigo-700 whitespace-nowrap">Tổng quan (%)</span>
                     </div>
-                    
+
                     <div className="h-56 w-full text-[10px] font-semibold select-none">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={averageScores} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
@@ -1930,7 +1996,6 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                               boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
                             }}
                             itemStyle={{ color: '#fff', padding: '1px 0' }}
-                            cursor={{ fill: isDarkMode ? 'rgba(255, 255, 255, 0.02)' : 'rgba(99, 102, 241, 0.04)' }}
                           />
                           <Legend 
                             verticalAlign="top" 
@@ -1941,17 +2006,15 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                           />
                           <Bar 
                             dataKey="Luyện tập (%)" 
-                            fill="#6366f1" 
+                            fill="#3b82f6" 
                             radius={[4, 4, 0, 0]} 
-                            maxBarSize={16} 
-                            name="Học luyện tập" 
+                            name="Luyện tập" 
                           />
                           <Bar 
                             dataKey="Thi thử (%)" 
-                            fill="#22c55e" 
+                            fill="#10b981" 
                             radius={[4, 4, 0, 0]} 
-                            maxBarSize={16} 
-                            name="Phần thi thử" 
+                            name="Thi thử" 
                           />
                         </BarChart>
                       </ResponsiveContainer>
@@ -2041,228 +2104,213 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-white p-4 rounded-xl border border-slate-105 shadow-sm text-center">
                           <span className="text-[9px] text-slate-400 font-black uppercase block">Điểm thi thử TB</span>
-                          <span className="text-xl font-extrabold text-indigo-600 block">
+                          <span className="text-lg font-black text-indigo-650 block mt-1 font-mono">
                             {mockHistory.length > 0 
-                              ? (mockHistory.reduce((sum: number, h: any) => sum + h.score, 0) / mockHistory.length).toFixed(1) + "/10"
-                              : "Chưa thi"
-                            }
+                              ? (mockHistory.reduce((sum, h) => sum + h.score, 0) / mockHistory.length).toFixed(1) 
+                              : "0.0"}/10
                           </span>
                         </div>
-                        
                         <div className="bg-white p-4 rounded-xl border border-slate-105 shadow-sm text-center">
-                          <span className="text-[9px] text-slate-400 font-black uppercase block">Tỷ lệ Đỗ Mock</span>
-                          <span className="text-xl font-extrabold text-emerald-600 block">
-                            {mockHistory.length > 0
-                              ? Math.round((mockHistory.filter((h: any) => h.passed).length / mockHistory.length) * 100) + "%"
-                              : "0%"
-                            }
+                          <span className="text-[9px] text-slate-400 font-black uppercase block">Tỷ lệ thi đỗ</span>
+                          <span className="text-lg font-black text-emerald-600 block mt-1 font-mono">
+                            {mockHistory.length > 0 
+                              ? `${Math.round((mockHistory.filter(h => h.passed).length / mockHistory.length) * 100)}%` 
+                              : "0%"}
                           </span>
-                        </div>
-                      </div>
-
-                      {/* Cumulative Study hours summary */}
-                      <div className="bg-white p-4 rounded-xl border border-slate-105 shadow-sm space-y-2">
-                        <div className="flex justify-between items-center text-[10px] text-slate-400 font-black uppercase">
-                          <span>Tổng thời học thực tế:</span>
-                          <span className="text-indigo-600 font-extrabold font-mono text-[11px]">
-                            {formatStudyTime((Object.values(studyTimes) as number[]).reduce((sum: number, t: number) => sum + t, 0))}
-                          </span>
-                        </div>
-                        
-                        {/* Progress distributions */}
-                        <div className="space-y-2 pt-2 border-t border-slate-50">
-                          <span className="text-[9.5px] text-slate-400 font-black uppercase tracking-wider block">Thời gian theo chuyên đề:</span>
-                          {topicDetails.map(topic => {
-                            const timeVal = studyTimes[topic.id] || 0;
-                            const totalTime = (Object.values(studyTimes) as number[]).reduce((sum: number, t: number) => sum + t, 0) || 1;
-                            const percent = Math.round((timeVal / totalTime) * 100);
-                            
-                            return (
-                              <div key={topic.id} className="space-y-0.5 text-[10px] font-bold text-slate-650">
-                                <div className="flex justify-between items-center">
-                                  <span>Chuyên đề {topic.id}</span>
-                                  <span className="font-mono text-slate-500 font-semibold">{formatStudyTime(timeVal)} ({percent}%)</span>
-                                </div>
-                                <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
-                                  <div 
-                                    className="h-full bg-indigo-600 rounded-full" 
-                                    style={{ width: `${percent}%` }}
-                                  />
-                                </div>
-                              </div>
-                            );
-                          })}
                         </div>
                       </div>
                     </div>
 
-                    {/* Interactive Daily Streak Reminder & Scheduler Panel */}
-                    <div className="bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 p-5 rounded-3xl border border-indigo-500/15 shadow-xl text-white space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] bg-orange-500/10 text-orange-400 border border-orange-500/20 font-black px-2.5 py-1 rounded-md uppercase tracking-wider flex items-center gap-1.5 shadow-inner">
-                          <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500 animate-pulse" /> NHẮC NHỞ STREAK
-                        </span>
-                        
-                        {todayPracticedCount >= 3 ? (
-                          <span className="text-[9px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-black px-2 py-0.5 rounded uppercase flex items-center gap-1.5 shadow">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-400" /> AN TOÀN
-                          </span>
-                        ) : (
-                          <span className="text-[9px] bg-red-500/15 text-red-400 border border-red-500/30 font-black px-2 py-0.5 rounded uppercase flex items-center gap-1.5 animate-pulse shadow">
-                            <AlertCircle className="w-3 h-3 text-red-400" /> CẦN DUY TRÌ
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="space-y-1 bg-white/2 p-2 rounded-2xl">
-                        <h4 className="text-xs font-black text-slate-150 uppercase tracking-tight flex items-center gap-1.5">
-                          Kỷ Luật Học Tập Hàng Ngày
-                        </h4>
-                        <p className="text-[10.5px] text-slate-450 font-semibold leading-relaxed">
-                          {todayPracticedCount >= 3 
-                            ? "🎉 Tuyệt vời! Bạn đã hoàn thành 3 câu luyện tập để bảo vệ Streak cho hôm nay. Ngày mai tiếp tục nhé!"
-                            : `⏳ Bạn còn thiếu ${3 - todayPracticedCount} câu trắc nghiệm đúng nữa để duy trì streak ${streakDays} ngày liên tiếp!`
-                          }
-                        </p>
-                      </div>
-
-                      {/* Interactive Steps indicators with quick-action buttons */}
-                      <div className="space-y-2 pt-1 font-sans">
-                        <div className="flex items-center justify-between text-xs p-3 rounded-2xl bg-white/5 border border-white/5">
-                          <div className="flex items-center gap-2">
-                            <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-black border border-emerald-500/20">
-                              ✓
-                            </div>
-                            <span className="text-[11px] font-bold text-slate-200">Đăng nhập cổng VNU1001</span>
-                          </div>
-                          <span className="text-[9px] text-slate-400 font-black tracking-widest">OK</span>
+                    {!streakEnabled ? (
+                      <div className="bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl text-center space-y-4">
+                        <div className="w-11 h-11 rounded-full bg-slate-800/80 flex items-center justify-center border border-slate-700/60 mx-auto shadow-sm">
+                          <Flame className="w-5 h-5 text-slate-500 fill-slate-600" />
                         </div>
-
-                        <div className="flex items-center justify-between text-xs p-3 rounded-2xl bg-white/5 border border-white/5">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black border ${
-                              todayPracticedCount >= 3 
-                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/25' 
-                                : 'bg-orange-500/20 text-orange-400 border-orange-500/25 animate-pulse'
-                            }`}>
-                              {todayPracticedCount >= 3 ? "✓" : "2"}
-                            </div>
-                            <span className="text-[11px] font-bold text-slate-200">Đúng 3 câu ôn luyện ({todayPracticedCount}/3)</span>
-                          </div>
+                        <div className="space-y-1">
+                          <h4 className="text-xs font-black text-slate-200 uppercase tracking-wide">Chuỗi Streak Đang Tắt</h4>
+                          <p className="text-[10.5px] text-slate-400 font-medium leading-relaxed max-w-xs mx-auto">
+                            Hệ thống nhiệm vụ rèn luyện và nhắc nhở ngày vàng đang tạm khóa để bạn học tự do thoải mái.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setStreakEnabled(true);
+                            localStorage.setItem("vnu1001_streak_enabled_v1", "true");
+                            addStreakToast("🔥 Đã kích hoạt lại hệ thống ngày vàng Streak!", "success");
+                          }}
+                          className="w-full py-2 px-4 rounded-xl bg-indigo-600 hover:bg-slate-950 text-white hover:text-indigo-400 border border-transparent hover:border-indigo-500/30 text-xs font-black shadow-lg transition duration-200 cursor-pointer active:translate-y-0.5"
+                        >
+                          Kích hoạt lại Streak học tập
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 p-5 rounded-3xl border border-indigo-500/15 shadow-xl text-white space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] bg-orange-500/10 text-orange-400 border border-orange-500/20 font-black px-2.5 py-1 rounded-md uppercase tracking-wider flex items-center gap-1.5 shadow-inner">
+                            <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500 animate-pulse" /> NHẮC NHỞ STREAK
+                          </span>
+                          
                           {todayPracticedCount >= 3 ? (
-                            <span className="text-[9px] text-emerald-400 font-black tracking-wider">Xong</span>
+                            <span className="text-[9px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-black px-2 py-0.5 rounded uppercase flex items-center gap-1.5 shadow">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" /> AN TOÀN
+                            </span>
                           ) : (
-                            <button 
-                              onClick={() => {
-                                setSelectedTopic(1);
-                                setPracticeIndex(0);
-                                setChosenOption(null);
-                                setShowExplanation(false);
-                                setActiveTab('practice');
-                                addStreakToast("📖 Hãy rèn luyện kiến thức và trả lời đúng 3 câu trắc nghiệm nhé!", "info");
-                              }}
-                              className="text-[9.5px] bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-3 py-1.5 rounded-xl transition cursor-pointer select-none active:translate-y-0.5 border-none outline-none"
-                            >
-                              HỌC NGAY
-                            </button>
+                            <span className="text-[9px] bg-red-500/15 text-red-400 border border-red-500/30 font-black px-2 py-0.5 rounded uppercase flex items-center gap-1.5 animate-pulse shadow">
+                              <AlertCircle className="w-3 h-3 text-red-450" /> CẦN DUY TRÌ
+                            </span>
                           )}
                         </div>
 
-                        <div className="flex items-center justify-between text-xs p-3 rounded-2xl bg-white/5 border border-white/5">
-                          <div className="flex items-center gap-2 font-semibold">
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black border ${
-                              (todayMockSubmitted || pomoCompletedSessions > 0) 
-                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/25' 
-                                : 'bg-slate-800 text-slate-450 border-slate-700'
-                            }`}>
-                              {(todayMockSubmitted || pomoCompletedSessions > 0) ? "✓" : "3"}
+                        <div className="space-y-1 bg-white/2 p-2 rounded-2xl">
+                          <h4 className="text-xs font-black text-slate-150 uppercase tracking-tight flex items-center gap-1.5">
+                            Kỷ Luật Học Tập Hàng Ngày
+                          </h4>
+                          <p className="text-[10.5px] text-slate-450 font-semibold leading-relaxed">
+                            {todayPracticedCount >= 3 
+                              ? "🎉 Tuyệt vời! Bạn đã hoàn thành 3 câu luyện tập để bảo vệ Streak cho hôm nay. Ngày mai tiếp tục nhé!"
+                              : `⏳ Bạn còn thiếu ${3 - todayPracticedCount} câu trắc nghiệm đúng nữa để duy trì streak ${streakDays} ngày liên tiếp!`
+                            }
+                          </p>
+                        </div>
+
+                        {/* Interactive Steps indicators with quick-action buttons */}
+                        <div className="space-y-2 pt-1 font-sans">
+                          <div className="flex items-center justify-between text-xs p-3 rounded-2xl bg-white/5 border border-white/5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-black border border-emerald-500/20">
+                                ✓
+                              </div>
+                              <span className="text-[11px] font-bold text-slate-200">Đăng nhập cổng VNU1001</span>
                             </div>
-                            <span className="text-[11px] font-bold text-slate-200">Thi thử hoặc 1 Pomodoro</span>
+                            <span className="text-[9px] text-slate-400 font-black tracking-widest">OK</span>
                           </div>
-                          {(todayMockSubmitted || pomoCompletedSessions > 0) ? (
-                            <span className="text-[9px] text-emerald-400 font-black tracking-wider">Xong</span>
-                          ) : (
-                            <div className="flex gap-1">
+
+                          <div className="flex items-center justify-between text-xs p-3 rounded-2xl bg-white/5 border border-white/5">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black border ${
+                                todayPracticedCount >= 3 
+                                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/25' 
+                                  : 'bg-orange-500/20 text-orange-400 border-orange-500/25 animate-pulse'
+                              }`}>
+                                {todayPracticedCount >= 3 ? "✓" : "2"}
+                              </div>
+                              <span className="text-[11px] font-bold text-slate-200">Đúng 3 câu ôn luyện ({todayPracticedCount}/3)</span>
+                            </div>
+                            {todayPracticedCount >= 3 ? (
+                              <span className="text-[9px] text-emerald-400 font-black tracking-wider">Xong</span>
+                            ) : (
                               <button 
                                 onClick={() => {
-                                  handleStartMockExam();
-                                  addStreakToast("📝 Hãy chọn 1 đề thi thử học kỳ để rèn luyện tư duy phản biện nhé!", "info");
+                                  setSelectedTopic(1);
+                                  setPracticeIndex(0);
+                                  setChosenOption(null);
+                                  setShowExplanation(false);
+                                  setActiveTab('practice');
+                                  addStreakToast("📖 Hãy rèn luyện kiến thức và trả lời đúng 3 câu trắc nghiệm nhé!", "info");
                                 }}
-                                className="text-[9.5px] bg-slate-800 hover:bg-slate-750 text-slate-200 font-extrabold px-2 py-1.5 rounded-xl transition cursor-pointer select-none active:translate-y-0.5 border-none outline-none"
+                                className="text-[9.5px] bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-3 py-1.5 rounded-xl transition cursor-pointer select-none active:translate-y-0.5 border-none outline-none"
                               >
-                                THI THỬ
+                                HỌC NGAY
                               </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Interactive Streak Scheduler Widget */}
-                      <div className="mt-4 pt-4 border-t border-slate-800/85 space-y-3">
-                        <label className="text-[9px] font-black text-indigo-300 uppercase tracking-widest block font-mono">
-                          ⚙️ Cấu Hình Giờ Nhắc Nhở Học Tập
-                        </label>
-                        
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <span className="text-[8.5px] text-slate-450 font-black uppercase tracking-wider block">Mốc thời gian</span>
-                            <select
-                              value={reminderTime}
-                              onChange={(e) => {
-                                setReminderTime(e.target.value);
-                                localStorage.setItem("vnu1001_streak_reminder_time_v1", e.target.value);
-                                addStreakToast(`⏰ Hệ thống sẽ nhắc nhở rèn luyện học tập vào lúc ${e.target.value} mỗi ngày!`, "info");
-                              }}
-                              className="w-full text-xs font-bold text-slate-200 bg-slate-900 border border-slate-800 rounded-xl py-2 px-2.5 cursor-pointer outline-none focus:border-indigo-500 transition shadow-inner"
-                            >
-                              <option value="08:00">08:00 Sáng</option>
-                              <option value="12:00">12:00 Trưa</option>
-                              <option value="18:00">18:00 Chiều</option>
-                              <option value="20:00">20:00 Tối</option>
-                              <option value="21:30">21:30 Đêm</option>
-                              <option value="22:00">22:00 Đêm</option>
-                            </select>
+                            )}
                           </div>
 
-                          <div className="space-y-1">
-                            <span className="text-[8.5px] text-slate-450 font-black uppercase tracking-wider block">Yêu cầu báo</span>
+                          <div className="flex items-center justify-between text-xs p-3 rounded-2xl bg-white/5 border border-white/5">
+                            <div className="flex items-center gap-2 font-semibold">
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black border ${
+                                (todayMockSubmitted || pomoCompletedSessions > 0) 
+                                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/25' 
+                                  : 'bg-slate-800 text-slate-450 border-slate-700'
+                              }`}>
+                                {(todayMockSubmitted || pomoCompletedSessions > 0) ? "✓" : "3"}
+                              </div>
+                              <span className="text-[11px] font-bold text-slate-200">Thi thử hoặc 1 Pomodoro</span>
+                            </div>
+                            {(todayMockSubmitted || pomoCompletedSessions > 0) ? (
+                              <span className="text-[9px] text-emerald-400 font-black tracking-wider">Xong</span>
+                            ) : (
+                              <div className="flex gap-1">
+                                <button 
+                                  onClick={() => {
+                                    handleStartMockExam();
+                                    addStreakToast("📝 Hãy chọn 1 đề thi thử học kỳ để rèn luyện tư duy phản biện nhé!", "info");
+                                  }}
+                                  className="text-[9.5px] bg-slate-800 hover:bg-slate-750 text-slate-200 font-extrabold px-2 py-1.5 rounded-xl transition cursor-pointer select-none active:translate-y-0.5 border-none outline-none"
+                                >
+                                  THI THỬ
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Interactive Streak Scheduler Widget */}
+                        <div className="mt-4 pt-4 border-t border-slate-800/85 space-y-3">
+                          <label className="text-[9px] font-black text-indigo-300 uppercase tracking-widest block font-mono">
+                            ⚙️ Cấu Hình Giờ Nhắc Nhở Học Tập
+                          </label>
+                          
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <span className="text-[8.5px] text-slate-455 font-black uppercase tracking-wider block">Mốc thời gian</span>
+                              <select
+                                value={reminderTime}
+                                onChange={(e) => {
+                                  setReminderTime(e.target.value);
+                                  localStorage.setItem("vnu1001_streak_reminder_time_v1", e.target.value);
+                                  addStreakToast(`⏰ Hệ thống sẽ nhắc nhở rèn luyện học tập vào lúc ${e.target.value} mỗi ngày!`, "info");
+                                }}
+                                className="w-full text-xs font-bold text-slate-200 bg-slate-900 border border-slate-800 rounded-xl py-2 px-2.5 cursor-pointer outline-none focus:border-indigo-500 transition shadow-inner"
+                              >
+                                <option value="08:00">08:00 Sáng</option>
+                                <option value="12:00">12:00 Trưa</option>
+                                <option value="18:00">18:00 Chiều</option>
+                                <option value="20:00">20:00 Tối</option>
+                                <option value="21:30">21:30 Đêm</option>
+                                <option value="22:00">22:00 Đêm</option>
+                              </select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <span className="text-[8.5px] text-slate-450 font-black uppercase tracking-wider block">Yêu cầu báo</span>
+                              <button
+                                onClick={() => {
+                                  const nextActive = !reminderActive;
+                                  setReminderActive(nextActive);
+                                  localStorage.setItem("vnu1001_streak_reminder_active_v1", nextActive.toString());
+                                  addStreakToast(nextActive ? "🔔 Đã BẬT chuông thông báo đẩy nhắc nhở Streak!" : "🔕 Đã TẮT chuông nhắc nhở Streak.", "info");
+                                }}
+                                className={`w-full text-xs font-bold py-2 px-2.5 rounded-xl transition cursor-pointer text-center flex items-center justify-center gap-1.5 border select-none border-transparent ${
+                                  reminderActive 
+                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/15" 
+                                    : "bg-slate-900 text-slate-500 border-slate-800 hover:bg-slate-850"
+                                }`}
+                              >
+                                {reminderActive ? "🔔 BẬT NHẮC" : "🔕 TẮT NHẮC"}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Quick trigger test notification button */}
+                          <div className="pt-1.5 select-none">
                             <button
                               onClick={() => {
-                                const nextActive = !reminderActive;
-                                setReminderActive(nextActive);
-                                localStorage.setItem("vnu1001_streak_reminder_active_v1", nextActive.toString());
-                                addStreakToast(nextActive ? "🔔 Đã BẬT chuông thông báo đẩy nhắc nhở Streak!" : "🔕 Đã TẮT chuông nhắc nhở Streak.", "info");
+                                const msgs = [
+                                  `⏰ KỶ LUẬT STREAK: Hôm nay bạn ôn bài chưa? Đừng bỏ rơi mục tiêu học tập VNU1001 ngày hôm nay nhé!`,
+                                  `🔥 CẢNH BÁO STREAK: Chuỗi vàng ${streakDays} ngày học liên hoàn của bạn sắp hết kỳ hạn! Ôn tập 3 câu ngay để bảo vệ chuỗi nào!`,
+                                  `🌟 TRÁCH NHIỆM: Kỷ luật là nền tảng của sự bứt phá! Nhấp ngay học 3 câu trắc nghiệm siêu tốc bảo vệ streak.`
+                                ];
+                                const randomMsg = msgs[Math.floor(Math.random() * msgs.length)];
+                                addStreakToast(randomMsg, "warning");
                               }}
-                              className={`w-full text-xs font-bold py-2 px-2.5 rounded-xl transition cursor-pointer text-center flex items-center justify-center gap-1.5 border select-none border-transparent ${
-                                reminderActive 
-                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/15" 
-                                  : "bg-slate-900 text-slate-500 border-slate-800 hover:bg-slate-850"
-                              }`}
+                              className="w-full text-center py-2.5 rounded-xl bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-white border border-slate-800 text-[10px] font-black tracking-widest font-mono transition cursor-pointer uppercase shadow-sm active:translate-y-0.5"
                             >
-                              {reminderActive ? "🔔 BẬT NHẮC" : "🔕 TẮT NHẮC"}
+                              🔔 Phát thử thông báo đẩy mẫu
                             </button>
                           </div>
                         </div>
-
-                        {/* Quick trigger test notification button */}
-                        <div className="pt-1.5 select-none">
-                          <button
-                            onClick={() => {
-                              const msgs = [
-                                `⏰ KỶ LUẬT STREAK: Hôm nay bạn ôn bài chưa? Đừng bỏ rơi mục tiêu học tập VNU1001 ngày hôm nay nhé!`,
-                                `🔥 CẢNH BÁO STREAK: Chuỗi vàng ${streakDays} ngày học liên hoàn của bạn sắp hết kỳ hạn! Ôn tập 3 câu ngay để bảo vệ chuỗi nào!`,
-                                `🌟 TRÁCH NHIỆM: Kỷ luật là nền tảng của sự bứt phá! Nhấp ngay học 3 câu trắc nghiệm siêu tốc bảo vệ streak.`
-                              ];
-                              const randomMsg = msgs[Math.floor(Math.random() * msgs.length)];
-                              addStreakToast(randomMsg, "warning");
-                            }}
-                            className="w-full text-center py-2.5 rounded-xl bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-white border border-slate-800 text-[10px] font-black tracking-widest font-mono transition cursor-pointer uppercase shadow-sm active:translate-y-0.5"
-                          >
-                            🔔 Phát thử thông báo đẩy mẫu
-                          </button>
-                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* Right Column: List of mock exam attempts */}
@@ -4527,7 +4575,7 @@ Giải thích: RAM (Random Access Memory) là bộ nhớ dữ liệu tạm để
 
                   <div className="py-1">
                     <span className="text-base font-black text-slate-900 border-b border-dashed border-slate-400 pb-0.5 px-4 inline-block">
-                      {certFullName || (currentSubject === 'vnu1001' ? "Học viên VNU1001" : currentSubject === 'pldc' ? "Học viên Pháp Luật" : currentSubject === 'mldg' ? "Học viên Đo Lường GD" : "Học viên Tâm Lý Học")}
+                      {certFullName || (currentSubject === 'vnu1001' ? "Học viên VNU1001" : currentSubject === 'pldc' ? "Học viên Pháp Luật" : currentSubject === 'mldg' ? "Học viên Đo Lường GD" : currentSubject === 'tlhgd' ? "Học viên Tâm Lý Học" : "Học viên Khoa Học Quản Lý")}
                     </span>
                   </div>
 
@@ -4536,7 +4584,9 @@ Giải thích: RAM (Random Access Memory) là bộ nhớ dữ liệu tạm để
                       ? "Đã xuất sắc hoàn thành lộ trình trắc nghiệm khảo thí gồm 4 chuyên đề cốt lõi với điểm số vượt bậc."
                       : currentSubject === 'tlhgd'
                         ? "Đã xuất sắc hoàn thành lộ trình trắc nghiệm khảo thí gồm 6 chuyên đề tâm lý giáo dục cốt lõi với điểm số vượt bậc."
-                        : "Đã xuất sắc hoàn thành lộ trình trắc nghiệm khảo thí gồm 6 chuyên đề cốt lõi với điểm số vượt bậc."}
+                        : currentSubject === 'khqlgd'
+                          ? "Đã xuất sắc hoàn thành lộ trình trắc nghiệm khảo thí gồm 4 chuyên đề khoa học quản lý giáo dục với điểm số vượt bậc."
+                          : "Đã xuất sắc hoàn thành lộ trình trắc nghiệm khảo thí gồm 6 chuyên đề cốt lõi với điểm số vượt bậc."}
                   </p>
                 </div>
 

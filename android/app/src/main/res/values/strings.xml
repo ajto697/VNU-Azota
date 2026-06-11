@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Azota VNU1001</string>
+    <string name="title_activity_main">Azota VNU1001</string>
+    <string name="package_name">com.azota.vnu1001</string>
+    <string name="custom_url_scheme">com.azota.vnu1001</string>
+</resources>
