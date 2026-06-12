@@ -12,7 +12,7 @@ import {
   AlertCircle, ShieldAlert, Award as MedalIcon,
   Coffee, Pause, RotateCcw, Volume2,
   Sun, Moon, Trash2, Plus, Download, Upload, Shuffle,
-  Trophy, Users, Target
+  Trophy, Users, Target, Settings
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -282,9 +282,19 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
 
   // Workspace subviews: 'dashboard' | 'practice' | 'mock_exam' | 'bookmarks' | 'exam_result' | 'importer'
   const [activeTab, setActiveTab] = useState<'dashboard' | 'practice' | 'mock_exam' | 'bookmarks' | 'exam_result' | 'importer'>('dashboard');
+  
+  // Tabbed sidebar focus in practice mode
+  const [sidebarActiveTab, setSidebarActiveTab] = useState<'questions' | 'tools' | 'settings'>('questions');
 
   // --- LOCAL STATE ENGINE ---
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_THEME_KEY);
+      return saved !== "light"; // Default to dark mode (true) unless explicitly toggled to light previously
+    } catch (e) {
+      return true;
+    }
+  });
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
   const [answeredHistory, setAnsweredHistory] = useState<{ [qId: string]: { correct: boolean; chosenOption: number } }>({});
   const [streakDays, setStreakDays] = useState<number>(3); // seeded default
@@ -2590,573 +2600,553 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
               exit={{ opacity: 0, scale: 0.98 }}
               className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start"
             >
-              {/* Left Column: List navigation / filters */}
-              <div className="lg:col-span-4 bg-white rounded-3xl border border-slate-200 p-6 space-y-6 shadow-sm">
-                <button
-                  onClick={() => setActiveTab('dashboard')}
-                  className="text-xs font-bold text-slate-500 hover:text-slate-900 transition flex items-center gap-1 cursor-pointer"
-                >
-                  <ChevronLeft className="w-4 h-4" /> Quay lại bảng tổng quan
-                </button>
-
-                <div className="space-y-1.5 pb-4 border-b border-slate-100">
-                  <span className="text-[10px] bg-blue-50 text-blue-600 font-extrabold px-2.5 py-1 rounded-md block w-fit uppercase">VỊ TRÍ ÔN TẬP</span>
-                  <h3 className="text-sm font-black text-slate-900 leading-snug">{VNU_TOPICS[selectedTopic - 1]}</h3>
-                </div>
-
-                {/* PRACTICE MODE SELECTOR */}
-                <div className="bg-slate-50 p-4.5 rounded-2xl border border-slate-200/60 space-y-3">
-                  <div className="flex items-center justify-between text-[10px] uppercase font-black tracking-widest text-slate-500 select-none">
-                    <span className="flex items-center gap-1">
-                      <Target className="w-3.5 h-3.5 text-indigo-500" /> Chế độ luyện tập
+              <div className="lg:col-span-4 bg-white rounded-3xl border border-slate-200 p-6 space-y-5 shadow-sm flex flex-col justify-between" style={{ minHeight: '680px' }}>
+                <div className="space-y-4">
+                  {/* Outer navigation back action */}
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => setActiveTab('dashboard')}
+                      className="text-xs font-black text-slate-400 hover:text-indigo-505 transition-luxury flex items-center gap-1 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" /> Bảng học tập
+                    </button>
+                    
+                    <span className="text-[9px] font-mono font-black text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md uppercase">
+                      Chuyên đề {selectedTopic}
                     </span>
-                    <span className="text-[8px] bg-emerald-100 text-emerald-800 font-black px-1.5 py-0.5 rounded uppercase font-bold">Mới</span>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2">
+                  {/* Header info */}
+                  <div className="space-y-2 pb-3.5 border-b border-slate-150/50">
+                    <h3 className="text-sm font-black text-slate-900 leading-snug tracking-tight">
+                      {VNU_TOPICS[selectedTopic - 1]}
+                    </h3>
+                    
+                    {/* Progress tracking bar */}
+                    {(() => {
+                      const topicQs = fullDatabase.filter(q => q.topicId === selectedTopic);
+                      const topicAnsweredCount = topicQs.filter(q => answeredHistory[q.id] !== undefined).length;
+                      const progressVal = topicQs.length > 0 ? Math.round((topicAnsweredCount / topicQs.length) * 100) : 0;
+                      return (
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center text-[10px] font-bold text-slate-400">
+                            <span>Đã cọ xát: {topicAnsweredCount} / {topicQs.length} câu</span>
+                            <span className="text-indigo-650 font-black">{progressVal}%</span>
+                          </div>
+                          <div className="relative w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                              className="absolute top-0 left-0 h-full bg-indigo-600 rounded-full transition-all duration-300"
+                              style={{ width: `${progressVal}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* DESIGN SYSTEM TABBED CONTROLLER */}
+                  <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100/80 rounded-2xl border border-slate-205">
                     <button
                       type="button"
-                      onClick={() => {
-                        if (practiceExamMode) {
-                          setPracticeExamMode(false);
-                          addStreakToast("⚡ Đã bật: Xem đáp án/giải thích ngay lập tức!", "info");
-                        }
-                      }}
-                      className={`p-3 rounded-xl border text-left flex flex-col gap-0.5 transition cursor-pointer select-none ${
-                        !practiceExamMode 
-                          ? "bg-white border-blue-500 shadow-sm ring-1 ring-blue-505/10" 
-                          : "bg-slate-50 border-slate-200/60 hover:bg-slate-100/60"
+                      onClick={() => setSidebarActiveTab('questions')}
+                      className={`py-2 rounded-xl text-xs font-black transition-luxury flex flex-col items-center gap-0.5 cursor-pointer ${
+                        sidebarActiveTab === 'questions'
+                          ? "bg-white text-indigo-650 shadow-sm border border-slate-200/50"
+                          : "text-slate-404 hover:text-slate-700"
                       }`}
                     >
-                      <span className={`text-[10.5px] font-black ${!practiceExamMode ? "text-blue-600" : "text-slate-700"}`}>
-                        ⚡ Instant Answer (Xem Giải Thích Ngay)
-                      </span>
-                      <span className="text-[9px] text-slate-450 leading-normal font-semibold">
-                        Hiển thị lời giải chi tiết và tính đúng sai tức thì sau khi chọn đáp án.
-                      </span>
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span className="text-[8px] uppercase tracking-wide">Đặt đề</span>
                     </button>
-
                     <button
                       type="button"
-                      onClick={() => {
-                        if (!practiceExamMode) {
-                          setPracticeExamMode(true);
-                          setPracticeTempAnswers({});
-                          addStreakToast("📝 Đã bật Chế độ Thi Thử: Nhớ ấn [Nộp Bài] sau khi xong nhé!", "warning");
-                        }
-                      }}
-                      className={`p-3 rounded-xl border text-left flex flex-col gap-0.5 transition cursor-pointer select-none ${
-                        practiceExamMode 
-                          ? "bg-white border-indigo-600 shadow-sm ring-1 ring-indigo-505/10" 
-                          : "bg-slate-50 border-slate-200/60 hover:bg-slate-100/60"
+                      onClick={() => setSidebarActiveTab('tools')}
+                      className={`py-2 rounded-xl text-xs font-black transition-luxury flex flex-col items-center gap-0.5 cursor-pointer ${
+                        sidebarActiveTab === 'tools'
+                          ? "bg-white text-indigo-650 shadow-sm border border-slate-200/50"
+                          : "text-slate-404 hover:text-slate-700"
                       }`}
                     >
-                      <span className={`text-[10.5px] font-black ${practiceExamMode ? "text-indigo-650" : "text-slate-800"}`}>
-                        📝 Exam Simulation (Nộp Bài Mới Chấm Điểm)
-                      </span>
-                      <span className="text-[9px] text-slate-450 leading-normal font-semibold">
-                        Hoàn toàn ẩn đúng sai và đáp án trong khi rèn luyện. Điểm số, bảng xếp hạng sẽ hiển thị khi bạn nộp bài.
-                      </span>
+                      <Clock className="w-3.5 h-3.5" />
+                      <span className="text-[8px] uppercase tracking-wide">Tiện ích</span>
                     </button>
-                  </div>
-                </div>
-
-                {/* PRACTICE RE-LEARN AND RESET CONTROLS */}
-                <div className="bg-slate-50 p-4.5 rounded-2xl border border-slate-200/60 space-y-2.5">
-                  <div className="flex items-center gap-1.5 text-[9px] uppercase font-black tracking-widest text-slate-450 select-none">
-                    <RefreshCw className="w-3 h-3 text-indigo-500 animate-spin" style={{ animationDuration: '6s' }} /> Tùy chọn làm lại
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
                     <button
-                      disabled={!activePracticeQuestion || (answeredHistory[activePracticeQuestion.id] === undefined && chosenOption === null)}
-                      onClick={() => {
-                        if (activePracticeQuestion) {
-                          handleRetryCurrentQuestion(activePracticeQuestion.id);
-                        }
-                      }}
-                      className={`text-[10px] font-black py-2.5 px-1 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer select-none border border-transparent shadow-sm ${
-                        activePracticeQuestion && (answeredHistory[activePracticeQuestion.id] !== undefined || chosenOption !== null)
-                          ? "bg-indigo-600 hover:bg-indigo-750 text-white cursor-pointer hover:shadow-indigo-600/10"
-                          : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-70"
+                      type="button"
+                      onClick={() => setSidebarActiveTab('settings')}
+                      className={`py-2 rounded-xl text-xs font-black transition-luxury flex flex-col items-center gap-0.5 cursor-pointer ${
+                        sidebarActiveTab === 'settings'
+                          ? "bg-white text-indigo-650 shadow-sm border border-slate-200/50"
+                          : "text-slate-404 hover:text-slate-700"
                       }`}
-                      title={activePracticeQuestion ? "Đặt lại và chọn lại đáp án cho câu hỏi này" : "Hãy chọn đáp án trước khi làm lại"}
                     >
-                      <RotateCcw className="w-3.5 h-3.5" /> Làm lại câu này
-                    </button>
-                    
-                    <button
-                      onClick={() => handleResetTopicPractice(false)}
-                      className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-[10px] font-black py-2.5 px-0.5 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer select-none shadow-sm shadow-orange-550/10"
-                      title="Chỉ xóa câu trả lời SAI để làm lại, giữ nguyên câu đúng"
-                    >
-                      <AlertCircle className="w-3.5 h-3.5 text-white" /> Học lại câu sai
+                      <Settings className="w-3.5 h-3.5" />
+                      <span className="text-[8px] uppercase tracking-wide">Cấu hình</span>
                     </button>
                   </div>
 
-                  {/* Red/Danger link to reset the entire chapter with clear warning */}
-                  <div className="pt-2 border-t border-slate-200/50 flex justify-center">
-                    <button
-                      onClick={() => handleResetTopicPractice(true)}
-                      className="text-[9.5px] font-extrabold text-red-600 hover:text-red-700 hover:underline transition cursor-pointer flex items-center gap-1 bg-transparent border-none outline-none"
-                      title="Chỉ sử dụng khi bạn thực sự muốn xóa hết tất cả kết quả bài ôn của chuyên đề hiện tại"
-                    >
-                      <Trash2 className="w-3 h-3" /> Đặt lại cả chương
-                    </button>
-                  </div>
-                </div>
-
-                {/* Question selector sidebar scroll list */}
-                <div className="space-y-3">
-                  <div className="flex flex-col gap-2 bg-slate-50 p-2.5 rounded-2xl border border-slate-200">
-                    <div className="flex items-center justify-between text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                      <span>Bộ lọc chuyên đề</span>
-                      <Filter className="w-3.5 h-3.5 text-slate-400" />
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <label className="text-[9px] text-slate-450 font-extrabold uppercase block select-none">Mức độ</label>
-                        <select 
-                          value={practiceDifficulty}
-                          onChange={(e) => {
-                            setPracticeDifficulty(e.target.value);
-                            setPracticeIndex(0);
-                            setChosenOption(null);
-                            setShowExplanation(false);
-                          }}
-                          className="w-full text-[10px] font-extrabold text-slate-700 bg-white border border-slate-200 rounded-xl py-1 px-1.5 cursor-pointer outline-none focus:border-indigo-500 transition"
-                        >
-                          <option value="all">Tất cả</option>
-                          <option value="nhan_biet">Nhận biết</option>
-                          <option value="thong_hieu">Thông hiểu</option>
-                          <option value="van_dung">Vận dụng</option>
-                          <option value="van_dung_cao">Vận dụng cao</option>
-                        </select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[9px] text-slate-450 font-extrabold uppercase block select-none">Trạng thái</label>
-                        <select 
-                          value={practiceStatusFilter}
-                          onChange={(e) => {
-                            setPracticeStatusFilter(e.target.value);
-                            setPracticeIndex(0);
-                            setChosenOption(null);
-                            setShowExplanation(false);
-                          }}
-                          className="w-full text-[10px] font-extrabold text-slate-700 bg-white border border-slate-200 rounded-xl py-1 px-1.5 cursor-pointer outline-none focus:border-indigo-500 transition"
-                        >
-                          <option value="all">Tất cả</option>
-                          <option value="wrong">⚠️ Câu làm SAI</option>
-                          <option value="correct">✅ Câu làm ĐÚNG</option>
-                          <option value="unanswered">📝 Chưa làm</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="text-[10px] font-black text-slate-500 flex justify-between items-center pt-1 border-t border-slate-200/40">
-                      <span>DANH SÁCH:</span>
-                      <span className="text-indigo-600 font-mono font-bold bg-indigo-50 px-1.5 py-0.5 rounded-md">{filteredPracticeQuestions.length} CÂU</span>
-                    </div>
-                  </div>
-
-                  {filteredPracticeQuestions.length === 0 ? (
-                    <div className="py-12 text-center text-xs text-slate-400 font-semibold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                      Chưa tìm thấy câu hỏi thuộc mức độ lọc này!
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-5 gap-2 max-h-72 overflow-y-auto pr-1">
-                      {filteredPracticeQuestions.map((q, idx) => {
-                        const historyItem = answeredHistory[q.id];
-                        const tempAnswer = practiceTempAnswers[q.id];
-                        const isCurrent = idx === practiceIndex;
-                        let bgStyle = "bg-slate-50 text-slate-550 hover:bg-slate-100";
-
-                        if (isCurrent) {
-                          bgStyle = "bg-blue-600 text-white scale-105 border border-blue-500 font-black shadow";
-                        } else if (practiceExamMode) {
-                          if (tempAnswer !== undefined) {
-                            bgStyle = "bg-indigo-100 text-indigo-850 hover:bg-indigo-200 border border-indigo-250 font-black shadow-sm";
-                          } else if (historyItem) {
-                            // If they already submitted or answered previously
-                            bgStyle = historyItem.correct 
-                              ? "bg-emerald-50/60 text-emerald-700/65 border border-emerald-150/40" 
-                              : "bg-red-50/60 text-red-700/65 border border-red-150/40";
-                          }
-                        } else if (historyItem) {
-                          bgStyle = historyItem.correct 
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-150" 
-                            : "bg-red-50 text-red-700 border border-red-150";
-                        }
-
-                        let difTag = "";
-                        if (q.difficulty === 'nhan_biet') difTag = "NB";
-                        if (q.difficulty === 'thong_hieu') difTag = "TH";
-                        if (q.difficulty === 'van_dung') difTag = "VD";
-                        if (q.difficulty === 'van_dung_cao') difTag = "VDC";
-
-                        return (
-                          <button
-                            key={q.id}
-                            onClick={() => {
-                              setPracticeIndex(idx);
+                  {/* TAB CONTENT: QUESTIONS LIST */}
+                  {sidebarActiveTab === 'questions' && (
+                    <div className="space-y-4 animate-fade-in">
+                      {/* Interactive Dual Filters Row */}
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-slate-400 font-black uppercase tracking-wider block">Mức độ</label>
+                          <select 
+                            value={practiceDifficulty}
+                            onChange={(e) => {
+                              setPracticeDifficulty(e.target.value);
+                              setPracticeIndex(0);
                               setChosenOption(null);
                               setShowExplanation(false);
                             }}
-                            className={`h-11 rounded-xl text-[10px] font-mono font-bold flex flex-col justify-center items-center cursor-pointer transition-all duration-150 ${bgStyle}`}
-                            title={`Mức độ: ${difTag}`}
+                            className="w-full text-[10px] font-black rounded-xl py-2 px-2 border border-slate-200 bg-slate-50 cursor-pointer outline-none focus:border-indigo-500 transition-luxury"
                           >
-                            <span>#{idx + 1}</span>
-                            <span className="text-[7.5px] scale-90 tracking-tighter opacity-80 font-bold block">{difTag}</span>
-                          </button>
-                        );
-                      })}
+                            <option value="all">Tất cả mức độ</option>
+                            <option value="nhan_biet">Nhận biết</option>
+                            <option value="thong_hieu">Thông hiểu</option>
+                            <option value="van_dung">Vận dụng</option>
+                            <option value="van_dung_cao">Vận dụng cao</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-slate-450 font-black uppercase tracking-wider block">Trạng thái</label>
+                          <select 
+                            value={practiceStatusFilter}
+                            onChange={(e) => {
+                              setPracticeStatusFilter(e.target.value);
+                              setPracticeIndex(0);
+                              setChosenOption(null);
+                              setShowExplanation(false);
+                            }}
+                            className="w-full text-[10px] font-black rounded-xl py-2 px-2 border border-slate-200 bg-slate-50 cursor-pointer outline-none focus:border-indigo-500 transition-luxury"
+                          >
+                            <option value="all">Mọi trạng thái</option>
+                            <option value="wrong">⚠️ Câu làm sai</option>
+                            <option value="correct">✅ Câu làm đúng</option>
+                            <option value="unanswered">📝 Chưa làm</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Header count indicators */}
+                      <div className="text-[10px] font-black text-slate-400 flex justify-between items-center py-1.5 border-t border-b border-dashed border-slate-200/60">
+                        <span className="uppercase tracking-wider">Cơ sở dữ liệu đáp ứng:</span>
+                        <span className="font-mono text-indigo-650 bg-indigo-50/80 px-2 py-0.5 rounded-md font-extrabold">{filteredPracticeQuestions.length} câu</span>
+                      </div>
+
+                      {/* Matrix question grid scrollable container */}
+                      {filteredPracticeQuestions.length === 0 ? (
+                        <div className="py-12 text-center text-xs text-slate-400 font-semibold bg-slate-50/50 rounded-2xl border border-dashed border-slate-150">
+                          Chưa tìm thấy câu hỏi thuộc bộ lọc này!
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-5 gap-2 max-h-76 overflow-y-auto pr-1">
+                          {filteredPracticeQuestions.map((q, idx) => {
+                            const historyItem = answeredHistory[q.id];
+                            const tempAnswer = practiceTempAnswers[q.id];
+                            const isCurrent = idx === practiceIndex;
+                            let bgStyle = "bg-slate-50/70 text-slate-500 hover:bg-slate-100 border border-slate-150";
+
+                            if (isCurrent) {
+                              bgStyle = "bg-indigo-600 text-white scale-103 font-black shadow-md glow-indigo border-indigo-605";
+                            } else if (practiceExamMode) {
+                              if (tempAnswer !== undefined) {
+                                bgStyle = "bg-indigo-50 text-indigo-800 border-indigo-200 font-black shadow-sm";
+                              } else if (historyItem) {
+                                bgStyle = historyItem.correct 
+                                  ? "bg-emerald-50/40 text-emerald-650/80 border border-emerald-150/40" 
+                                  : "bg-red-50/40 text-red-655/80 border border-red-151/40";
+                              }
+                            } else if (historyItem) {
+                              bgStyle = historyItem.correct 
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-150" 
+                                : "bg-red-50 text-red-700 border border-red-150";
+                            }
+
+                            let difTag = "NB";
+                            if (q.difficulty === 'thong_hieu') difTag = "TH";
+                            if (q.difficulty === 'van_dung') difTag = "VD";
+                            if (q.difficulty === 'van_dung_cao') difTag = "VDC";
+
+                            return (
+                              <button
+                                key={q.id}
+                                onClick={() => {
+                                  setPracticeIndex(idx);
+                                  setChosenOption(null);
+                                  setShowExplanation(false);
+                                }}
+                                className={`h-11 rounded-xl text-[10px] font-mono font-bold flex flex-col justify-center items-center cursor-pointer transition-luxury ${bgStyle}`}
+                                title={`Mức độ: ${difTag}`}
+                              >
+                                <span className={isCurrent ? "font-black" : ""}>#{idx + 1}</span>
+                                <span className="text-[7.5px] scale-95 tracking-tighter opacity-80 block">{difTag}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
 
-                {/* DAILY STUDY STREAK TRACKER */}
-                <div className="pt-5 border-t border-slate-100 space-y-3.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] bg-orange-50 text-orange-750 font-black px-2.5 py-1 rounded-md uppercase tracking-wider flex items-center gap-1.5 border border-orange-200/40">
-                      <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500 animate-pulse" /> THEO DÕI STREAK HÀNG NGÀY
-                    </span>
-                    {streakDays >= 7 ? (
-                      <span className="text-[9px] bg-yellow-100 text-yellow-800 font-extrabold px-1.5 py-0.5 rounded flex items-center gap-1">
-                        <Sparkles className="w-2.5 h-2.5 animate-spin" /> Kim Cương
-                      </span>
-                    ) : (
-                      <span className="text-[9px] bg-indigo-50 text-indigo-700 font-black px-1.5 py-0.5 rounded uppercase">Mục Tiêu Tuần</span>
-                    )}
-                  </div>
-
-                  <div className="bg-gradient-to-br from-slate-50 to-orange-50/20 p-4.5 rounded-2xl border border-slate-200/85 relative overflow-hidden group">
-                    {/* Visual background flame glow effect */}
-                    <div className="absolute right-0 bottom-0 select-none pointer-events-none opacity-[0.03] scale-150 translate-x-14 translate-y-8 text-orange-500">
-                      <Flame className="w-28 h-28 fill-orange-500" />
-                    </div>
-
-                    <div className="flex items-center justify-between z-10 relative">
-                      <div className="space-y-0.5">
-                        <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider">Chuỗi ngày hiện tại</span>
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-3xl font-black text-slate-900 leading-none font-mono tracking-tight">{streakDays}</span>
-                          <span className="text-xs font-bold text-slate-505">ngày</span>
+                  {/* TAB CONTENT: UTILITIES & STREAK */}
+                  {sidebarActiveTab === 'tools' && (
+                    <div className="space-y-4 animate-fade-in max-h-[460px] overflow-y-auto pr-1">
+                      {/* Pomodoro block */}
+                      <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-150 flex flex-col items-center relative overflow-hidden">
+                        <div className="absolute right-0 bottom-0 select-none opacity-[0.03] scale-125 text-red-505">
+                          <Timer className="w-16 h-16" />
                         </div>
-                      </div>
-                      
-                      <div className="text-right">
-                        <span className="text-[8.5px] text-slate-400 font-black uppercase block leading-none">KỶ LỤC CỦA BẠN</span>
-                        <span className="text-xs font-black text-indigo-650 font-mono flex items-center justify-end gap-1 mt-1">
-                          <MedalIcon className="w-3.5 h-3.5 text-indigo-600" /> {maxStreak} ngày
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Weekly active calendar bubbles row */}
-                    <div className="mt-4 pt-3.5 border-t border-slate-200/50">
-                      <span className="text-[9px] text-slate-400 font-black uppercase block tracking-wider mb-2 text-center">
-                        Lịch ôn tuần (T2 - CN)
-                      </span>
-                      <div className="grid grid-cols-7 gap-1">
-                        {getWeekDates().map((dayOpt, idx) => (
-                          <div key={idx} className="flex flex-col items-center gap-1">
-                            <span className={`text-[8.5px] font-black ${dayOpt.isToday ? 'text-indigo-600' : 'text-slate-400'}`}>
-                              {dayOpt.label}
-                            </span>
-                            <div 
-                              className={`w-7 h-7 rounded-sm flex items-center justify-center text-xs font-black transition-all ${
-                                dayOpt.isCompleted
-                                  ? 'bg-gradient-to-br from-orange-400 to-red-500 text-white shadow-sm shadow-orange-500/20'
-                                  : dayOpt.isToday
-                                    ? 'border-2 border-dashed border-indigo-500 bg-white text-indigo-500 animate-pulse'
-                                    : 'bg-slate-100 text-slate-400 border border-slate-200/50'
-                              }`}
-                              title={dayOpt.isCompleted ? `Đã học hôm ${dayOpt.dateStr}` : `Chưa học hôm ${dayOpt.dateStr}`}
-                            >
-                              {dayOpt.isCompleted ? (
-                                <Flame className="w-3.5 h-3.5 fill-white text-white" />
-                              ) : (
-                                <span className="text-[9px] font-bold font-mono">
-                                  {dayOpt.dateStr.split('-')[2]}
-                                </span>
-                              )}
-                            </div>
+                        
+                        <div className="text-center space-y-0.5">
+                          <span className="text-[8.5px] uppercase tracking-widest font-black text-slate-400 block font-sans">
+                            {pomoMode === 'focus' ? "⏱️ Phiên Tập Trung Học" : "☕ Phiên Nghỉ Thư Giãn"}
+                          </span>
+                          <div className="text-2xl font-mono font-black text-slate-800 flex items-center justify-center gap-1">
+                            {pomoMode === 'focus' ? (
+                              <Flame className="w-4.5 h-4.5 text-red-500 fill-red-500 animate-pulse" />
+                            ) : (
+                              <Coffee className="w-4.5 h-4.5 text-emerald-500 animate-bounce" />
+                            )}
+                            <span>{formatTime(pomoTimeLeft)}</span>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Daily Quest checklist to maintain streak */}
-                    <div className="mt-4 pt-3.5 border-t border-slate-200/50 space-y-2">
-                      <span className="text-[9px] text-slate-400 font-black uppercase tracking-wider block">
-                        Nhiệm vụ hôm nay duy trì:
-                      </span>
-                      
-                      <div className="space-y-1.5 text-[10.5px] font-bold text-slate-600">
-                        {/* Goal 1: Log in */}
-                        <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-xl border border-slate-100">
-                          <span className="flex items-center gap-1.5">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                            Đăng nhập cổng VNU1001
-                          </span>
-                          <span className="text-[9.5px] font-black text-emerald-600 uppercase">Đạt 110%</span>
                         </div>
 
-                        {/* Goal 2: Practice count answers */}
-                        <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-xl border border-slate-100">
-                          <span className="flex items-center gap-1.5">
-                            <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 border ${
-                              todayPracticedCount >= 3 ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300'
-                            }`}>
-                              {todayPracticedCount >= 3 && <Check className="w-2 h-2 text-white" />}
-                            </span>
-                            Đúng 3 câu ôn luyện ({todayPracticedCount}/3)
-                          </span>
-                          <span className={`text-[9.5px] font-black ${todayPracticedCount >= 3 ? 'text-emerald-600' : 'text-slate-400'}`}>
-                            {todayPracticedCount >= 3 ? "Đạt" : "Chưa đủ"}
-                          </span>
-                        </div>
-
-                        {/* Goal 3: Complete pomodoro or submit mock exam */}
-                        <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-xl border border-slate-100">
-                          <span className="flex items-center gap-1.5">
-                            {(() => {
-                              const satisfied = todayMockSubmitted || pomoCompletedSessions > 0;
-                              return (
-                                <>
-                                  <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 border ${
-                                    satisfied ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300'
-                                  }`}>
-                                    {satisfied && <Check className="w-2 h-2 text-white" />}
-                                  </span>
-                                  1 Pomodoro hoặc Thi thử
-                                </>
-                              );
-                            })()}
-                          </span>
-                          <span className={`text-[9.5px] font-black ${
-                            (todayMockSubmitted || pomoCompletedSessions > 0) ? 'text-emerald-600' : 'text-slate-400'
-                          }`}>
-                            {(todayMockSubmitted || pomoCompletedSessions > 0) ? "Đạt" : "0 / 1"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Badges and milestone rewards */}
-                    <div className="mt-4 pt-3.5 border-t border-slate-200/50 space-y-2">
-                      <span className="text-[9px] text-slate-400 font-black uppercase tracking-wider block">
-                        Huy chương tích lũy ({Math.min(4, Math.floor(streakDays / 2) + 1)}/4)
-                      </span>
-                      <div className="grid grid-cols-4 gap-1">
-                        {[
-                          { text: "Novice", goal: 1, color: "text-emerald-600 bg-emerald-50 border-emerald-200", icon: Sparkles, name: "Tân Binh Chăm Chỉ" },
-                          { text: "Focus", goal: 3, color: "text-blue-600 bg-blue-50 border-blue-200", icon: MedalIcon, name: "Focus Mẫn Cán" },
-                          { text: "Master", goal: 5, color: "text-purple-650 bg-purple-50 border-purple-200", icon: Award, name: "Khai Thác Thạc Sĩ" },
-                          { text: "Champion", goal: 7, color: "text-amber-600 bg-amber-50 border-amber-200", icon: Star, name: "Đại Sư Đắc Đạo" }
-                        ].map((badge, bIdx) => {
-                          const unlocked = streakDays >= badge.goal;
-                          const IconComp = badge.icon;
-                          return (
-                            <div 
-                              key={bIdx}
-                              className={`p-1 rounded-xl border flex flex-col items-center justify-center text-center transition-all ${
-                                unlocked 
-                                  ? `${badge.color} scale-103 font-bold`
-                                  : 'bg-slate-100/50 border-slate-200/40 text-slate-300 filter grayscale'
+                        {/* Presets and adjustment controls */}
+                        <div className="grid grid-cols-4 gap-1 w-full mt-3">
+                          {[15, 25, 45, 60].map(mins => (
+                            <button
+                              key={mins}
+                              type="button"
+                              onClick={() => handlePomoConfigure(mins)}
+                              className={`py-1 rounded-lg text-[8px] font-black transition-luxury cursor-pointer ${
+                                pomoMinutes === mins && pomoMode === 'focus'
+                                  ? "bg-slate-900 text-white shadow-sm"
+                                  : "bg-white hover:bg-slate-100 text-slate-600 border border-slate-200"
                               }`}
-                              title={`${badge.name}: Đạt từ ${badge.goal} ngày Streak.`}
                             >
-                              <IconComp className={`w-3.5 h-3.5 ${unlocked ? 'animate-bounce' : ''}`} style={{ animationDuration: `${2.5 + bIdx}s` }} />
-                              <span className="text-[7px] tracking-tight block font-extrabold uppercase mt-1 select-none leading-none">{badge.text}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                              {mins}m
+                            </button>
+                          ))}
+                        </div>
 
-                    {/* Simulation tools for developer dry run */}
-                    <div className="mt-3.5 pt-3 border-t border-dashed border-slate-200 w-full">
-                      <div className="flex justify-between items-center bg-slate-100 p-2 rounded-xl border border-slate-200/50">
-                        <span className="text-[8px] text-slate-400 font-bold uppercase select-none">⚡ Giả lập Streak:</span>
-                        <div className="flex gap-1">
+                        <div className="flex gap-2 w-full mt-3">
+                          <button
+                            type="button"
+                            onClick={() => setPomoIsActive(!pomoIsActive)}
+                            className={`flex-1 py-1.5 rounded-xl text-[10px] font-black transition-luxury flex items-center justify-center gap-1.5 shadow-sm cursor-pointer ${
+                              pomoIsActive 
+                                ? "bg-amber-500 hover:bg-amber-600 text-white" 
+                                : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                            }`}
+                          >
+                            {pomoIsActive ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-white" />}
+                            <span>{pomoIsActive ? "Tạm dừng" : "Khởi động"}</span>
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => {
-                              const nextStreak = streakDays + 1;
-                              setStreakDays(nextStreak);
-                              localStorage.setItem(STORAGE_STREAK_KEY, nextStreak.toString());
-                              if (nextStreak > maxStreak) {
-                                setMaxStreak(nextStreak);
-                                localStorage.setItem(STORAGE_MAX_STREAK_KEY, nextStreak.toString());
-                              }
-                              // Add today study date
-                              registerStudyActivity();
-                              // Seed yesterday date too so it continues nicely
-                              const yes = new Date();
-                              yes.setDate(yes.getDate() - 1);
-                              const yesStr = `${yes.getFullYear()}-${String(yes.getMonth() + 1).padStart(2, '0')}-${String(yes.getDate()).padStart(2, '0')}`;
-                              setCompletedDates(prev => {
-                                const next = prev.includes(yesStr) ? prev : [...prev, yesStr];
-                                localStorage.setItem(STORAGE_COMPLETED_DATES_KEY, JSON.stringify(next));
-                                return next;
-                              });
+                              setPomoTimeLeft(pomoMinutes * 60);
+                              setPomoIsActive(false);
                             }}
-                            className="px-1.5 py-0.5 bg-white border border-slate-350 rounded text-[7.5px] font-black hover:bg-slate-100 transition cursor-pointer"
+                            className="py-1.5 px-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 transition flex items-center justify-center cursor-pointer"
                           >
-                            +1 Ngày
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Daily study streak details container */}
+                      {streakEnabled && (
+                        <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-4 rounded-2xl text-white space-y-3.5 relative overflow-hidden border border-indigo-900/60 shadow-lg shadow-indigo-950/20">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[9px] bg-orange-500/10 text-orange-400 border border-orange-500/20 font-black px-2 py-0.5 rounded uppercase tracking-wider flex items-center gap-1 font-sans">
+                              <Flame className="w-3 h-3 text-orange-500 fill-orange-500" /> STREAK TRACK
+                            </span>
+                            <span className="text-[10px] text-slate-350 font-black tracking-tight font-mono">
+                              Chỉ tiêu ({todayPracticedCount}/3)
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between z-10 relative">
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] text-slate-450 font-extrabold uppercase block tracking-wider font-sans">Chuỗi Ngày Ôn Tập</span>
+                              <div className="flex items-baseline gap-1">
+                                <span className="text-2xl font-black font-mono leading-none">{streakDays}</span>
+                                <span className="text-[10px] font-bold text-slate-400 font-sans">ngày</span>
+                              </div>
+                            </div>
+                            
+                            <div className="text-right font-sans">
+                              <span className="text-[8px] text-slate-455 font-extrabold block leading-none">KỶ LỤC</span>
+                              <span className="text-[11px] font-black text-indigo-300 font-mono flex items-center justify-end gap-1 mt-0.5">
+                                <Award className="w-3 h-3 text-indigo-400" /> {maxStreak} ngày
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Quick checklist */}
+                          <div className="space-y-1 text-[10px] font-sans">
+                            {/* Target 1 */}
+                            <div className="flex items-center justify-between bg-white/5 py-1 px-2 rounded-lg border border-white/5">
+                              <span className="flex items-center gap-1.5 text-slate-200">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                                Đăng nhập cổng VNU1001
+                              </span>
+                              <span className="text-[8px] font-black text-emerald-400 uppercase">ĐỦ</span>
+                            </div>
+                            {/* Target 2 */}
+                            <div className="flex items-center justify-between bg-white/5 py-1 px-2 rounded-lg border border-white/5">
+                              <span className="flex items-center gap-1.5 text-slate-200">
+                                <span className={`w-3 h-3 rounded-full flex items-center justify-center shrink-0 border ${
+                                  todayPracticedCount >= 3 ? 'bg-emerald-500 border-emerald-500' : 'border-slate-500'
+                                }`}>
+                                  {todayPracticedCount >= 3 && <Check className="w-1.5 h-1.5 text-white" />}
+                                </span>
+                                Đúng 3 câu ôn ({todayPracticedCount}/3)
+                              </span>
+                              <span className={`text-[8.5px] font-black ${todayPracticedCount >= 3 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                                {todayPracticedCount >= 3 ? "OK" : "Thiếu"}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Weekly Calendar Row */}
+                          <div className="grid grid-cols-7 gap-0.5 pt-2 border-t border-white/5">
+                            {getWeekDates().map((dayOpt, idx) => (
+                              <div key={idx} className="flex flex-col items-center gap-0.5">
+                                <span className={`text-[8px] font-black ${dayOpt.isToday ? 'text-indigo-300' : 'text-slate-400'}`}>
+                                  {dayOpt.label}
+                                </span>
+                                <div 
+                                  className={`w-6 h-6 rounded flex items-center justify-center text-xs font-black transition-all ${
+                                    dayOpt.isCompleted
+                                      ? 'bg-gradient-to-br from-orange-400/90 to-red-500 border border-orange-500/10 text-white shadow-sm'
+                                      : dayOpt.isToday
+                                        ? 'border border-indigo-400 bg-indigo-950 text-indigo-450'
+                                        : 'bg-white/5 text-slate-400 border border-white/5'
+                                  }`}
+                                  title={dayOpt.isCompleted ? `Đã hoàn thành` : `Chưa học`}
+                                >
+                                  {dayOpt.isCompleted ? (
+                                    <Flame className="w-3.5 h-3.5 fill-white text-white" />
+                                  ) : (
+                                    <span className="text-[8px] font-mono font-bold font-sans">
+                                      {dayOpt.dateStr.split('-')[2]}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Dev Streak Control */}
+                          <div className="flex justify-between items-center bg-slate-950 border border-white/5 p-1.5 rounded-xl mt-1 text-[8px] text-slate-400 select-none">
+                            <span>Giả lập:</span>
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nextStreak = streakDays + 1;
+                                  setStreakDays(nextStreak);
+                                  localStorage.setItem(STORAGE_STREAK_KEY, nextStreak.toString());
+                                  if (nextStreak > maxStreak) {
+                                    setMaxStreak(nextStreak);
+                                    localStorage.setItem(STORAGE_MAX_STREAK_KEY, nextStreak.toString());
+                                  }
+                                  registerStudyActivity();
+                                  const yes = new Date();
+                                  yes.setDate(yes.getDate() - 1);
+                                  const yesStr = `${yes.getFullYear()}-${String(yes.getMonth() + 1).padStart(2, '0')}-${String(yes.getDate()).padStart(2, '0')}`;
+                                  setCompletedDates(prev => {
+                                    const next = prev.includes(yesStr) ? prev : [...prev, yesStr];
+                                    localStorage.setItem(STORAGE_COMPLETED_DATES_KEY, JSON.stringify(next));
+                                    return next;
+                                  });
+                                }}
+                                className="px-1 py-0.5 bg-white/10 text-white rounded font-bold hover:bg-white/15 transition cursor-pointer"
+                              >
+                                +1d
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setStreakDays(0);
+                                  localStorage.setItem(STORAGE_STREAK_KEY, "0");
+                                  setCompletedDates([]);
+                                  localStorage.setItem(STORAGE_COMPLETED_DATES_KEY, "[]");
+                                  setTodayPracticedCount(0);
+                                }}
+                                className="px-1 py-0.5 bg-red-500/10 text-red-400 rounded font-bold hover:bg-red-550/15 transition cursor-pointer"
+                              >
+                                Reset
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB CONTENT: CONFIG & SETTINGS */}
+                  {sidebarActiveTab === 'settings' && (
+                    <div className="space-y-4 animate-fade-in max-h-[460px] overflow-y-auto pr-1 text-xs">
+                      {/* Interactive practice simulation switcher */}
+                      <div className="bg-slate-50/70 p-3.5 rounded-2xl border border-slate-150 space-y-2">
+                        <div className="flex items-center gap-1 text-[9px] uppercase font-black tracking-widest text-slate-450">
+                          <Target className="w-3.5 h-3.5 text-indigo-500" /> Chế độ ôn tập
+                        </div>
+                        
+                        <div className="grid grid-cols-1 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (practiceExamMode) {
+                                setPracticeExamMode(false);
+                                addStreakToast("⚡ Instant Answer: Phản hồi ngay tức thì!", "info");
+                              }
+                            }}
+                            className={`p-2.5 rounded-xl border text-left flex flex-col gap-0.5 transition-luxury cursor-pointer ${
+                              !practiceExamMode 
+                                ? "bg-white border-indigo-500 shadow-sm ring-1 ring-indigo-505/10" 
+                                : "bg-slate-50/50 border-slate-200 hover:bg-slate-55"
+                            }`}
+                          >
+                            <span className={`text-[10.5px] font-black ${!practiceExamMode ? "text-indigo-600" : "text-slate-700"}`}>
+                              ⚡ Instant Answer (Xem giải ngay)
+                            </span>
+                            <span className="text-[9px] text-slate-450 leading-tight block font-sans">
+                              Lời giải chi tiết và đúng sai hiển thị ngay sau khi chọn đáp án.
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!practiceExamMode) {
+                                setPracticeExamMode(true);
+                                setPracticeTempAnswers({});
+                                addStreakToast("📝 Đã bật Chế độ Thi Thử: Chọn xong hoãn chấm cho đến khi nhấn Nộp Bài!", "warning");
+                              }
+                            }}
+                            className={`p-2.5 rounded-xl border text-left flex flex-col gap-0.5 transition-luxury cursor-pointer ${
+                              practiceExamMode 
+                                ? "bg-white border-indigo-500 shadow-sm ring-1 ring-indigo-505/10" 
+                                : "bg-slate-50/50 border-slate-200 hover:bg-slate-55"
+                            }`}
+                          >
+                            <span className={`text-[10.5px] font-black ${practiceExamMode ? "text-indigo-600" : "text-slate-700"}`}>
+                              📝 Simulated Exam (Thi thử)
+                            </span>
+                            <span className="text-[9px] text-slate-450 leading-tight block font-sans">
+                              Hoàn toàn ẩn giải thích và đúng sai cho đến khi bạn nhấn nút "Nộp Bài".
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Reminder hours configurations */}
+                      <div className="bg-slate-50/70 p-3.5 rounded-2xl border border-slate-150 space-y-2">
+                        <div className="flex items-center gap-1.5 text-[9px] uppercase font-black tracking-widest text-slate-450">
+                          <Clock className="w-3.5 h-3.5 text-indigo-505" /> Nhắc nhở học tập
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            value={reminderTime}
+                            onChange={(e) => {
+                              setReminderTime(e.target.value);
+                              localStorage.setItem("vnu1001_streak_reminder_time_v1", e.target.value);
+                              addStreakToast(`⏰ Đã cài báo học vào lúc ${e.target.value} hàng ngày!`, "info");
+                            }}
+                            className="w-full text-[10px] font-black text-slate-700 bg-white border border-slate-200/80 rounded-xl py-2 px-2.5 cursor-pointer outline-none focus:border-indigo-500"
+                          >
+                            <option value="08:00">08:00 Sáng</option>
+                            <option value="12:05">12:05 Trưa</option>
+                            <option value="18:00">18:00 Tối</option>
+                            <option value="20:00">20:00 Tối</option>
+                            <option value="21:30">21:30 Đêm</option>
+                            <option value="22:00">22:00 Đêm</option>
+                          </select>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextActive = !reminderActive;
+                              setReminderActive(nextActive);
+                              localStorage.setItem("vnu1001_streak_reminder_active_v1", nextActive.toString());
+                              addStreakToast(nextActive ? "🔔 Đã bật nhắc nhở" : "🔕 Đã tắt nhắc nhở", "info");
+                            }}
+                            className={`text-[10px] font-black py-2 px-2 rounded-xl border transition-luxury cursor-pointer text-center select-none ${
+                              reminderActive 
+                                ? "bg-emerald-500/10 text-emerald-700 border-emerald-300"
+                                : "bg-white text-slate-405 border-slate-200"
+                            }`}
+                          >
+                            {reminderActive ? "🔔 BẬT NHẮC" : "🔕 TẮT NHẮC"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* PRACTICE RE-LEARN AND RESET CONTROLS */}
+                      <div className="bg-slate-50/70 p-3.5 rounded-2xl border border-slate-150 space-y-2.5">
+                        <div className="flex items-center gap-1.5 text-[9px] uppercase font-black tracking-widest text-slate-450 select-none">
+                          <RefreshCw className="w-3 h-3 text-indigo-500 animate-spin" style={{ animationDuration: '6s' }} /> Tiến độ ôn tập
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            disabled={!activePracticeQuestion || (answeredHistory[activePracticeQuestion.id] === undefined && chosenOption === null)}
+                            onClick={() => {
+                              if (activePracticeQuestion) {
+                                handleRetryCurrentQuestion(activePracticeQuestion.id);
+                              }
+                            }}
+                            className={`text-[10px] font-black py-2.5 px-1 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer select-none border border-transparent shadow-sm ${
+                              activePracticeQuestion && (answeredHistory[activePracticeQuestion.id] !== undefined || chosenOption !== null)
+                                ? "bg-indigo-600 hover:bg-indigo-750 text-white cursor-pointer hover:shadow-indigo-600/10"
+                                : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-70"
+                            }`}
+                            title={activePracticeQuestion ? "Đặt lại và chọn lại đáp án cho câu hỏi này" : "Hãy chọn đáp án trước khi làm lại"}
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" /> Làm lại câu này
                           </button>
                           
                           <button
-                            type="button"
-                            onClick={() => {
-                              setStreakDays(0);
-                              localStorage.setItem(STORAGE_STREAK_KEY, "0");
-                              setCompletedDates([]);
-                              localStorage.setItem(STORAGE_COMPLETED_DATES_KEY, "[]");
-                              setTodayPracticedCount(0);
-                            }}
-                            className="px-1.5 py-0.5 bg-red-50 text-red-600 border border-red-200 rounded text-[7.5px] font-black hover:bg-red-100 transition cursor-pointer"
+                            onClick={() => handleResetTopicPractice(false)}
+                            className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-[10px] font-black py-2.5 px-0.5 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer select-none shadow-sm shadow-orange-550/10"
+                            title="Chỉ xóa câu trả lời SAI để làm lại, giữ nguyên câu đúng"
                           >
-                            Reset
+                            <AlertCircle className="w-3.5 h-3.5 text-white" /> Học lại câu sai
+                          </button>
+                        </div>
+
+                        {/* Red/Danger link to reset chapter */}
+                        <div className="pt-2 border-t border-slate-150 flex justify-center">
+                          <button
+                            onClick={() => handleResetTopicPractice(true)}
+                            className="text-[9.5px] font-extrabold text-red-650 hover:text-red-700 hover:underline transition cursor-pointer flex items-center gap-1 bg-transparent border-none outline-none"
+                            title="Xóa hết kết quả chương này"
+                          >
+                            <Trash2 className="w-3 h-3" /> Đặt lại cả chương
                           </button>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </div>
+                  )}
 
-                {/* COMPACT & GORGEOUS POMODORO FOCUS TIMER */}
-                <div className="pt-5 border-t border-slate-100 space-y-3.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] bg-red-50 text-red-700 font-black px-2.5 py-1 rounded-md uppercase tracking-wider flex items-center gap-1.5">
-                      🍅 PHIÊN POMODORO
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-extrabold uppercase">
-                      Đã xong: <span className="text-slate-800 font-black font-mono">{pomoCompletedSessions}</span> chu kỳ
-                    </span>
-                  </div>
-
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-150 flex flex-col items-center shadow-inner relative overflow-hidden group">
-                    {/* Background abstract decoration for luxurious look */}
-                    <div className="absolute right-0 bottom-0 select-none pointer-events-none opacity-[0.03] scale-150 translate-x-1/4 translate-y-1/4 text-red-500">
-                      <Timer className="w-24 h-24" />
+                  {/* Legend badges always at bottom representing status indicators */}
+                  <div className="pt-3 border-t border-slate-150/50 flex flex-wrap gap-x-3 gap-y-1 text-[9.5px] font-black text-slate-400 uppercase tracking-wider">
+                    <div className="flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 bg-emerald-500 border border-emerald-600/20 rounded-full inline-block" /> Trả lời Đúng
                     </div>
-
-                    <div className="text-center space-y-1 z-10">
-                      <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 block">
-                        {pomoMode === 'focus' ? "⏱️ PHIÊN TẬP TRUNG HỌC" : "☕ PHIÊN NGHỈ THƯ GIÃN"}
-                      </span>
-                      
-                      <div className="text-3xl font-mono font-black text-slate-800 tracking-tight flex items-center justify-center gap-1.5">
-                        {pomoMode === 'focus' ? (
-                          <Flame className="w-5 h-5 text-red-500 shrink-0 fill-red-500 animate-pulse" />
-                        ) : (
-                          <Coffee className="w-5 h-5 text-emerald-500 shrink-0 animate-bounce" />
-                        )}
-                        <span>{formatTime(pomoTimeLeft)}</span>
-                      </div>
-
-                      <div className="flex items-center justify-center gap-1 pt-1">
-                        <span className={`w-1.5 h-1.5 rounded-full inline-block ${pomoIsActive ? 'bg-emerald-500 animate-ping' : 'bg-slate-400'}`} />
-                        <span className="text-[10px] text-slate-500 font-bold">
-                          {pomoIsActive ? "Đồng hồ đang chạy" : "Tạm dừng"}
-                        </span>
-                      </div>
+                    <div className="flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 bg-red-500 border border-red-600/20 rounded-full inline-block" /> Làm Sai
                     </div>
-
-                    {/* Timer setting controls - custom buttons */}
-                    <div className="grid grid-cols-4 gap-1.5 w-full mt-4 z-10">
-                      {[15, 25, 45, 60].map(mins => (
-                        <button
-                          key={mins}
-                          type="button"
-                          onClick={() => handlePomoConfigure(mins)}
-                          className={`py-1 rounded-lg text-[9px] font-black transition-all cursor-pointer ${
-                            pomoMinutes === mins && pomoMode === 'focus'
-                              ? "bg-slate-900 text-white shadow-sm"
-                              : "bg-white hover:bg-slate-100 text-slate-600 border border-slate-200"
-                          }`}
-                        >
-                          {mins} Phút
-                        </button>
-                      ))}
+                    <div className="flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 bg-indigo-650 rounded-full inline-block" /> Hiện tại
                     </div>
-
-                    {/* Custom minute range selector manual adjuster */}
-                    <div className="w-full flex items-center justify-between gap-2 mt-3 pt-3 border-t border-slate-200/50 z-10">
-                      <span className="text-[9px] text-slate-500 font-extrabold uppercase">Tùy chỉnh:</span>
-                      <div className="flex items-center gap-1">
-                        <button 
-                          type="button"
-                          onClick={() => handlePomoConfigure(Math.max(1, pomoMinutes - 1))}
-                          className="w-5 h-5 rounded bg-white hover:bg-slate-100 text-xs font-bold text-slate-600 border border-slate-200 flex items-center justify-center cursor-pointer"
-                        >
-                          -
-                        </button>
-                        <span className="text-[10px] font-bold text-slate-700 min-w-[32px] text-center font-mono">
-                          {pomoMinutes}m
-                        </span>
-                        <button 
-                          type="button"
-                          onClick={() => handlePomoConfigure(Math.min(180, pomoMinutes + 1))}
-                          className="w-5 h-5 rounded bg-white hover:bg-slate-100 text-xs font-bold text-slate-600 border border-slate-200 flex items-center justify-center cursor-pointer"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Clock controlling action buttons */}
-                    <div className="flex items-center gap-2 w-full mt-4 z-10">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPomoIsActive(!pomoIsActive);
-                        }}
-                        className={`flex-1 py-1.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1 shadow-sm cursor-pointer ${
-                          pomoIsActive 
-                            ? "bg-amber-50 hover:bg-amber-600 text-white" 
-                            : "bg-indigo-600 hover:bg-indigo-700 text-white"
-                        }`}
-                      >
-                        {pomoIsActive ? (
-                          <>
-                            <Pause className="w-3.5 h-3.5 fill-white" /> Tạm dừng
-                          </>
-                        ) : (
-                          <>
-                            <Play className="w-3.5 h-3.5 fill-white" /> Khởi động
-                          </>
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPomoTimeLeft(pomoMinutes * 60);
-                          setPomoIsActive(false);
-                        }}
-                        className="py-1.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-205 border border-slate-200 text-slate-705 hover:text-slate-900 transition flex items-center justify-center shadow-sm cursor-pointer"
-                        title="Reset Timer"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Legend badges */}
-                <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-3 text-[10px] font-bold text-slate-500">
-                  <div className="flex items-center gap-1">
-                    <span className="w-3 h-3 bg-emerald-500 border border-emerald-600 rounded-sm inline-block" /> Đã trả lời Đúng
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="w-3 h-3 bg-red-500 border border-red-650 rounded-sm inline-block" /> Trả lời Sai
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="w-3 h-3 bg-blue-600 rounded-sm inline-block" /> Đang học
                   </div>
                 </div>
               </div>
