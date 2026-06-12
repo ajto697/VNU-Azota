@@ -12,7 +12,7 @@ import {
   AlertCircle, ShieldAlert, Award as MedalIcon,
   Coffee, Pause, RotateCcw, Volume2,
   Sun, Moon, Trash2, Plus, Download, Upload, Shuffle,
-  Trophy, Users, Target, Settings
+  Trophy, Users, Target, Settings, Bell, BellOff
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -308,10 +308,26 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
     const saved = localStorage.getItem("vnu1001_streak_enabled_v1");
     return saved !== "false";
   });
+  const [streakToastsEnabled, setStreakToastsEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem("vnu1001_streak_toasts_enabled_v1");
+    return saved !== "false";
+  });
+  const [questionToastsEnabled, setQuestionToastsEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem("vnu1001_question_toasts_enabled_v1");
+    return saved !== "false";
+  });
   const [streakToasts, setStreakToasts] = useState<{ id: string; message: string; type: 'success' | 'warning' | 'info' }[]>([]);
 
-  const addStreakToast = (message: string, type: 'success' | 'warning' | 'info' = 'success') => {
+  const addStreakToast = (message: string, type: 'success' | 'warning' | 'info' = 'success', category: 'question' | 'streak' | 'system' = 'streak') => {
     if (localStorage.getItem("vnu1001_streak_enabled_v1") === "false") return;
+    
+    if (category === 'question' && localStorage.getItem("vnu1001_question_toasts_enabled_v1") === "false") {
+      return;
+    }
+    if (category === 'streak' && localStorage.getItem("vnu1001_streak_toasts_enabled_v1") === "false") {
+      return;
+    }
+
     const id = "toast_" + Date.now() + "_" + Math.random();
     setStreakToasts(prev => [...prev, { id, message, type }]);
     
@@ -1193,16 +1209,16 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
         localStorage.setItem("vnu1001_today_practiced_v1", next.toString());
         if (next === 3) {
           customAlert("🎉 Chúc mừng! Bạn đã trả lời đúng 3 câu trắc nghiệm hôm nay và hoàn thành mục tiêu ôn luyện để củng cố Streak!");
-          addStreakToast("🏆 Đã Đạt Mục Tiêu Ngày: Streak của bạn hôm nay đã được bảo vệ!", "success");
+          addStreakToast("🏆 Đã Đạt Mục Tiêu Ngày: Streak của bạn hôm nay đã được bảo vệ!", "success", "streak");
         } else if (next < 3) {
-          addStreakToast(`🎯 Đúng rồi! Tiến trình rèn luyện hôm nay: ${next}/3 câu đúng.`, "success");
+          addStreakToast(`🎯 Đúng rồi! Tiến trình rèn luyện hôm nay: ${next}/3 câu đúng.`, "success", "question");
         } else {
-          addStreakToast(`🎯 Câu trả lời chính xác! Tiếp tục bồi dưỡng kiến thức nhé.`, "success");
+          addStreakToast(`🎯 Câu trả lời chính xác! Tiếp tục bồi dưỡng kiến thức nhé.`, "success", "question");
         }
         return next;
       });
     } else {
-      addStreakToast("💡 Đáp án chưa đúng! Hãy xem phần giải thuật chi tiết để nắm vững bản chất.", "info");
+      addStreakToast("💡 Đáp án chưa đúng! Hãy xem phần giải thuật chi tiết để nắm vững bản chất.", "info", "question");
     }
 
     // Increase streak dynamically for cool feedback
@@ -3086,6 +3102,81 @@ export default function Vnu1001Portal({ onBackToLauncher }: Vnu1001PortalProps) 
                             }`}
                           >
                             {reminderActive ? "🔔 BẬT NHẮC" : "🔕 TẮT NHẮC"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Configuration: Notification Toasts Settings */}
+                      <div className="bg-slate-50/70 p-3.5 rounded-2xl border border-slate-150 space-y-2.5">
+                        <div className="flex items-center gap-1.5 text-[9px] uppercase font-black tracking-widest text-slate-450">
+                          <Bell className="w-3.5 h-3.5 text-indigo-505" /> Cấu hình thông báo (Tối ưu tập trung)
+                        </div>
+
+                        <div className="space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextVal = !questionToastsEnabled;
+                              setQuestionToastsEnabled(nextVal);
+                              localStorage.setItem("vnu1001_question_toasts_enabled_v1", nextVal.toString());
+                              if (nextVal) {
+                                addStreakToast("🔔 Đã bật thông báo phản hồi Đúng/Sai khi làm câu hỏi!", "info", "system");
+                              }
+                            }}
+                            className={`w-full p-2.5 rounded-xl border text-left flex items-start gap-2.5 transition active:scale-[0.98] cursor-pointer ${
+                              questionToastsEnabled
+                                ? "bg-white border-indigo-500 shadow-sm"
+                                : "bg-slate-100/50 border-slate-200 text-slate-400"
+                            }`}
+                          >
+                            <span className="mt-0.5">
+                              {questionToastsEnabled ? (
+                                <Bell className="w-4 h-4 text-emerald-505" />
+                              ) : (
+                                <BellOff className="w-4 h-4 text-slate-400" />
+                              )}
+                            </span>
+                            <div className="flex-1">
+                              <span className={`text-[10.5px] font-black ${questionToastsEnabled ? 'text-indigo-600' : 'text-slate-500'}`}>
+                                {questionToastsEnabled ? "🔔 Thông báo Đúng/Sai: Đang BẬT" : "🔕 Thông báo Đúng/Sai: Đang TẮT"}
+                              </span>
+                              <span className="text-[9px] text-slate-450 leading-tight block font-sans mt-0.5">
+                                Tắt đi để tránh xao nhãng khi chọn đáp án ôn luyện trắc nghiệm.
+                              </span>
+                            </div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextVal = !streakToastsEnabled;
+                              setStreakToastsEnabled(nextVal);
+                              localStorage.setItem("vnu1001_streak_toasts_enabled_v1", nextVal.toString());
+                              if (nextVal) {
+                                addStreakToast("🔥 Đã bật thông báo quà tặng và tiến trình Streak!", "success", "system");
+                              }
+                            }}
+                            className={`w-full p-2.5 rounded-xl border text-left flex items-start gap-2.5 transition active:scale-[0.98] cursor-pointer ${
+                              streakToastsEnabled
+                                ? "bg-white border-indigo-500 shadow-sm"
+                                : "bg-slate-100/50 border-slate-200 text-slate-400"
+                            }`}
+                          >
+                            <span className="mt-0.5">
+                              {streakToastsEnabled ? (
+                                <Bell className="w-4 h-4 text-emerald-550" />
+                              ) : (
+                                <BellOff className="w-4 h-4 text-slate-400" />
+                              )}
+                            </span>
+                            <div className="flex-1">
+                              <span className={`text-[10.5px] font-black ${streakToastsEnabled ? 'text-indigo-600' : 'text-slate-500'}`}>
+                                {streakToastsEnabled ? "🔔 Thông báo Streak: Đang BẬT" : "🔕 Thông báo Streak: Đang TẮT"}
+                              </span>
+                              <span className="text-[9px] text-slate-450 leading-tight block font-sans mt-0.5">
+                                Tắt đi để ẩn các pop-up dồn dập hoặc thành tích Streak dốc học.
+                              </span>
+                            </div>
                           </button>
                         </div>
                       </div>
